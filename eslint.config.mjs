@@ -37,7 +37,12 @@ const eslintConfig = antfu({
     "ts/no-unsafe-return": "off",
     "ts/no-floating-promises": "off",
     "ts/switch-exhaustiveness-check": "off",
+    "ts/return-await": "off",
+    "ts/unbound-method": "off",
     "ts/no-misused-promises": "off",
+    "regexp/no-super-linear-backtracking": "off",
+    "regexp/optimal-quantifier-concatenation": "off",
+    "e18e/prefer-static-regex": "off",
     "unused-imports/no-unused-vars": "off",
 
     // 放宽其他严格规则
@@ -48,6 +53,7 @@ const eslintConfig = antfu({
     "prefer-promise-reject-errors": "off",
     "node/prefer-global/process": "off",
     "regexp/no-unused-capturing-group": "off",
+    "next/no-img-element": "off",
 
     // 禁用 perfectionist 导入排序规则 (太严格)
     "perfectionist/sort-imports": "off",
