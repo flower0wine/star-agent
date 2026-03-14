@@ -5,16 +5,23 @@ import { LibSQLStore } from "@mastra/libsql";
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from "@mastra/observability";
 import { weatherWorkflow } from "./workflows/weather-workflow";
 import { weatherAgent } from "./agents/weather-agent";
+import { starAgent } from "./agents/star-agent";
 
+// Only create LibSQL store in Node.js environment (not during Next.js build)
+function createStorage() {
+  if (typeof window === "undefined") {
+    return new LibSQLStore({
+      id: "mastra-storage",
+      url: "file:./mastra.db",
+    });
+  }
+  return undefined;
+}
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
-  agents: { weatherAgent },
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    // stores observability, scores, ... into persistent file storage
-    url: "file:./mastra.db",
-  }),
+  agents: { weatherAgent, starAgent },
+  storage: createStorage(),
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
@@ -24,11 +31,11 @@ export const mastra = new Mastra({
       default: {
         serviceName: "mastra",
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new DefaultExporter(),
+          new CloudExporter(),
         ],
         spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+          new SensitiveDataFilter(),
         ],
       },
     },
