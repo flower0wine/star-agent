@@ -5,7 +5,6 @@ import { LibSQLStore } from "@mastra/libsql";
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from "@mastra/observability";
 import { weatherWorkflow } from "./workflows/weather-workflow";
 import { weatherAgent } from "./agents/weather-agent";
-import { starAgent } from "./agents/star-agent";
 
 // Only create LibSQL store in Node.js environment (not during Next.js build)
 function createStorage() {
@@ -20,7 +19,7 @@ function createStorage() {
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
-  agents: { weatherAgent, starAgent },
+  agents: { weatherAgent },
   storage: createStorage(),
   logger: new PinoLogger({
     name: "Mastra",

@@ -1,0 +1,41 @@
+"use client";
+
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronRightIcon } from "lucide-react";
+import type { ComponentProps } from "react";
+import { cn } from "@/lib/utils";
+
+import { useSchemaDisplayContext, SchemaDisplayContext } from "./context";
+import { SchemaDisplayProperty } from "./schema-display-property";
+
+export type SchemaDisplayResponseProps = ComponentProps<typeof Collapsible>;
+
+export function SchemaDisplayResponse({
+  className,
+  children,
+  ...props
+}: SchemaDisplayResponseProps) {
+  const { responseBody } = useSchemaDisplayContext(SchemaDisplayContext);
+
+  return (
+    <Collapsible className={cn(className)} defaultOpen {...props}>
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+        <span className="font-medium text-sm">Response</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="border-t">
+          {children
+            ?? responseBody?.map((prop) => (
+              <SchemaDisplayProperty key={prop.name} {...prop} depth={0} />
+            ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
