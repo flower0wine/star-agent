@@ -7,7 +7,7 @@ This file provides context for AI agents operating in this repository.
 - **Framework**: Next.js 16.1.6 with React 19.2.3
 - **Language**: TypeScript (strict mode enabled)
 - **Styling**: Tailwind CSS v4 with shadcn/ui components
-- **AI Framework**: Mastra (AI SDK)
+- **AI Framework**: Vercel (AI SDK)
 - **Package Manager**: bun
 
 ---
@@ -123,7 +123,6 @@ src/
 │   ├── ui/       # shadcn/ui base components
 │   └── ai-elements/  # AI-related UI components
 ├── lib/           # Utilities (utils.ts, etc.)
-├── mastra/        # AI agents, tools, workflows
 └── hooks/         # Custom React hooks
 ```
 

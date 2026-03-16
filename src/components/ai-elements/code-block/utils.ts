@@ -70,10 +70,11 @@ export async function getHighlighter(
 
 // Create raw tokens for immediate display while highlighting loads
 export function createRawTokens(code: string): TokenizedCode {
+  const safeCode = code ?? "";
   return {
     bg: "transparent",
     fg: "inherit",
-    tokens: code.split("\n").map((line) =>
+    tokens: safeCode.split("\n").map((line) =>
       line === ""
         ? []
         : [

@@ -4,9 +4,11 @@ import * as React from "react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import type {
+  SidebarContextProps
+} from "./context";
 import {
   SidebarContext,
-  SidebarContextProps,
   useSidebar,
 } from "./context";
 import {
