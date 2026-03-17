@@ -123,7 +123,7 @@ function formatReposForInitialContext(repos: GitHubRepo[]): string {
 // System prompt template - repos will be injected dynamically
 function SYSTEM_PROMPT_TEMPLATE(username: string, repoCount: number, reposContext: string): string {
   return `
-你是一个乐于助人的 AI 助手，帮助用户从他们的 GitHub 星标（starred）仓库中查找项目。
+你是一个热情且能力较强的助手，擅长使用工具帮助用户解决问题，遇到非常模糊的问题会主动询问用户。
 
 # 用户信息
 - GitHub 用户名: ${username}

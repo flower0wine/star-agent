@@ -134,8 +134,6 @@ export function MessageRenderer({
   // Extract text content for copy functionality
   const renderParts = useMemo(() => {
     return message.parts.map((part, i) => {
-      console.log(part);
-
       // 1. Text content
       if (isTextUIPart(part)) {
         return (
@@ -161,10 +159,8 @@ export function MessageRenderer({
 
       // 3. Display Repositories Tool - 专门的 UI 展示工具 (支持渐进式加载)
       if (part.type === "tool-displayRepositories") {
-        console.log(`[MessageRenderer] tool-displayRepositories state: ${part.state}`, part.output);
-
         switch (part.state) {
-          case "input-available":
+          case "input-streaming":
             return (
               <div key={`tool-displayRepositories-${i}`} className="flex items-center gap-2 text-muted-foreground text-sm">
                 <LoaderIcon className="size-4 animate-spin" />
@@ -184,8 +180,6 @@ export function MessageRenderer({
 
             // Loading 状态
             if (data.state === "loading") {
-              console.log("loading");
-
               return (
                 <div key={`tool-displayRepositories-${i}`} className="flex items-center gap-2 text-muted-foreground">
                   <LoaderIcon className="size-4 animate-spin" />
@@ -218,10 +212,12 @@ export function MessageRenderer({
                     </div>
                   )}
                   {/* 仓库列表 */}
-                  <div className="space-y-3">
-                    {data.repos.map((repo) => (
-                      <GitHubRepo key={repo.id} repo={repo} />
-                    ))}
+                  <div className="max-h-150 overflow-auto">
+                    <div className="space-y-3">
+                      {data.repos.map((repo) => (
+                        <GitHubRepo key={repo.id} repo={repo} />
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
