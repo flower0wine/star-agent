@@ -5,7 +5,7 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from "ai";
-import type { UIMessage, ToolUIPart } from "ai";
+import type { UIMessage, ToolUIPart, LanguageModelUsage } from "ai";
 
 import {
   Message,
@@ -37,6 +37,7 @@ import {
   ThumbsDownIcon,
   CheckIcon,
   LoaderIcon,
+  ZapIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useCallback, useMemo } from "react";
@@ -85,8 +86,11 @@ interface RepoToolOutput {
   };
 }
 
+// Custom message type with usage metadata
+interface ChatMessageWithUsage extends UIMessage<{ totalUsage: LanguageModelUsage }> {}
+
 export interface MessageRendererProps {
-  message: UIMessage;
+  message: ChatMessageWithUsage;
   isStreaming?: boolean;
   isLastMessage?: boolean;
   onReload?: () => void;
@@ -130,6 +134,8 @@ export function MessageRenderer({
   // Extract text content for copy functionality
   const renderParts = useMemo(() => {
     return message.parts.map((part, i) => {
+      console.log(part);
+
       // 1. Text content
       if (isTextUIPart(part)) {
         return (
@@ -173,6 +179,7 @@ export function MessageRenderer({
               loaded: number;
               total: number;
               message: string;
+              __duration?: number;
             };
 
             // Loading 状态
@@ -199,8 +206,15 @@ export function MessageRenderer({
                     </div>
                   )}
                   {data.state === "complete" && (
-                    <div className="text-muted-foreground text-sm">
-                      {data.message}
+                    <div className="flex items-center justify-between text-muted-foreground text-sm">
+                      <span>{data.message}</span>
+                      {data.__duration !== undefined && (
+                        <span className="text-xs">
+                          {data.__duration < 1000
+                            ? `${data.__duration}ms`
+                            : `${(data.__duration / 1000).toFixed(1)}s`}
+                        </span>
+                      )}
                     </div>
                   )}
                   {/* 仓库列表 */}
@@ -227,9 +241,13 @@ export function MessageRenderer({
 
       // 4. Other tools (使用默认 Tool 组件展示 JSON)
       if (isStaticToolUIPart(part)) {
+        // Extract duration from output if available
+        const output = part.output as Record<string, unknown> | undefined;
+        const duration = output?.__duration as number | undefined;
+
         return (
           <Tool key={`tool-${i}`}>
-            <ToolHeader type={part.type} state={part.state} />
+            <ToolHeader type={part.type} state={part.state} duration={duration} />
             <ToolContent>
               <ToolInput input={part.input} />
               {part.state === "output-available" && (
@@ -256,6 +274,18 @@ export function MessageRenderer({
       <MessageContent>
         <div className="space-y-3">{renderParts}</div>
       </MessageContent>
+
+      {/* Token usage display */}
+      {message.role === "assistant" && !isStreaming && message.metadata?.totalUsage && (
+        <div className="mt-2 flex items-center gap-3 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+          <ZapIcon className="size-3.5" />
+          <span>Tokens:</span>
+          <span className="font-medium">{message.metadata.totalUsage.totalTokens}</span>
+          <span className="text-muted-foreground/70">
+            (in: {message.metadata.totalUsage.inputTokens || 0}, out: {message.metadata.totalUsage.outputTokens || 0})
+          </span>
+        </div>
+      )}
 
       {/* Message toolbar for assistant messages */}
       {message.role === "assistant" && !isStreaming && (

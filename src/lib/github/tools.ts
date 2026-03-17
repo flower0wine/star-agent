@@ -7,11 +7,12 @@ import {
   filterRepos,
   filterReposByOptions,
   getUniqueLanguages,
-  getUniqueTopics
+  getUniqueTopics,
+  fetchRepoReadme
 
 
 } from "@/lib/github/api";
-import type { GitHubRepo, RepoFilterOptions } from "@/lib/github/api";
+import type { GitHubRepo, RepoFilterOptions, RepoReadme } from "@/lib/github/api";
 
 export type { GitHubRepo } from "@/lib/github/api";
 
@@ -148,18 +149,38 @@ export async function searchRepositories(
 }
 
 /**
- * Tool: Get repository details by name
+ * Tool: Get repository README content
+ * Fetches the README.md content from GitHub API
  */
-export async function getRepositoryByName(
+export async function getRepositoryReadme(
   repos: GitHubRepo[],
   fullName: string
-): Promise<RepoSummary | null> {
+): Promise<{ readme: string; html_url: string } | null> {
+  // Find the repo in local cache first
   const repo = repos.find(
     (r) =>
       r.full_name.toLowerCase() === fullName.toLowerCase()
       || r.name.toLowerCase() === fullName.toLowerCase()
   );
-  return repo ? toRepoSummary(repo) : null;
+
+  if (!repo) {
+    return null;
+  }
+
+  try {
+    // Extract owner and repo name from full_name
+    const [owner, repoName] = repo.full_name.split("/");
+    const readmeContent = await fetchRepoReadme(owner, repoName);
+
+    return {
+      readme: readmeContent.content || "",
+      html_url: readmeContent.html_url,
+    };
+  } catch (error) {
+    // Return null if README not found or other error
+    console.error(`Failed to fetch README for ${fullName}:`, error);
+    return null;
+  }
 }
 
 /**

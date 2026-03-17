@@ -3,6 +3,8 @@
  * Uses unauthenticated API to fetch user's starred repositories
  */
 
+import { Buffer } from "node:buffer";
+
 export interface GitHubRepo {
   id: number;
   name: string;
@@ -237,4 +239,60 @@ export function getUniqueTopics(repos: GitHubRepo[]): string[] {
     repo.topics.forEach((topic) => topics.add(topic));
   });
   return [...topics].sort();
+}
+
+/**
+ * Fetch README content for a repository
+ * Uses GitHub API: GET /repos/{owner}/{repo}/readme
+ */
+export interface RepoReadme {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  content?: string; // Base64 encoded when encoding is base64
+  encoding?: string;
+  html_url: string;
+  download_url: string | null;
+}
+
+export async function fetchRepoReadme(owner: string, repo: string): Promise<RepoReadme> {
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/readme`,
+    {
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "Star-Agent-Chatbot",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`README not found for ${owner}/${repo}`);
+    }
+    if (response.status === 403) {
+      throw new Error("GitHub API rate limit exceeded. Please try again later.");
+    }
+    throw new Error(`Failed to fetch README: ${response.statusText}`);
+  }
+
+  const data: RepoReadme = await response.json();
+  return data;
+}
+
+/**
+ * Fetch README content and decode if needed
+ * Returns the raw markdown content
+ */
+export async function fetchRepoReadmeContent(owner: string, repo: string): Promise<string> {
+  const readme = await fetchRepoReadme(owner, repo);
+
+  if (readme.encoding === "base64" && readme.content) {
+    // Decode base64 and handle potential UTF-8 issues
+    const decoded = Buffer.from(readme.content, "base64").toString("utf-8");
+    return decoded;
+  }
+
+  return readme.content || "";
 }

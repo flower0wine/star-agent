@@ -1,4 +1,5 @@
 import { tool, convertToModelMessages, streamText, stepCountIs } from "ai";
+import type { LanguageModelUsage, UIMessage } from "ai";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
@@ -6,16 +7,19 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import { z } from "zod";
 import {
-  getRepositoryByName,
   getRepositoryStats,
   getTopics,
   getLanguages,
   searchRepositories,
-  formatReposForContext
+  formatReposForContext,
+  getRepositoryReadme
 
 } from "@/lib/github/tools";
 import type { GitHubRepo } from "@/lib/github/tools";
 import type { GitHubRepo as RepoType } from "@/lib/github/api";
+
+// Custom metadata type for messages
+export interface ChatMessage extends UIMessage<{ totalUsage: LanguageModelUsage }> {}
 
 // Provider configuration
 const PROVIDER = process.env.AI_PROVIDER || "openai";
@@ -100,19 +104,41 @@ async function getRepos(username: string): Promise<GitHubRepo[]> {
   return data.repos;
 }
 
-// System prompt
-const SYSTEM_PROMPT = `
+/// 将仓库格式化为简洁的上下文信息（用于初始提示词）
+function formatReposForInitialContext(repos: GitHubRepo[]): string {
+  return repos
+    .map((repo) => {
+      const parts = [
+        repo.full_name,
+        repo.description || "无描述",
+        `⭐${repo.stargazers_count}`,
+        repo.language || "",
+        repo.topics.join(", "),
+      ];
+      return parts.join(" | ");
+    })
+    .join("\n");
+}
+
+// System prompt template - repos will be injected dynamically
+function SYSTEM_PROMPT_TEMPLATE(username: string, repoCount: number, reposContext: string): string {
+  return `
 你是一个乐于助人的 AI 助手，帮助用户从他们的 GitHub 星标（starred）仓库中查找项目。
+
+# 用户信息
+- GitHub 用户名: ${username}
+- 仓库总数: ${repoCount} 个
+
+# 用户仓库列表（完整）
+以下是用户的完整仓库列表，请先阅读这些信息，这对你回答问题非常重要：
+
+${reposContext}
 
 # 工作职责
 
 - 获取他们的星标仓库列表，并帮助他们找到想要的内容
 - 通过提问澄清需求，缩小搜索范围
 - 以清晰有条理的方式展示相关的仓库信息
-- 按关键词、编程语言、主题、星标数量搜索仓库
-- 通过仓库名称获取详细信息
-- 获取用户星标相关的统计数据
-- 展示用户的星标仓库列表
 
 # 约束
 
@@ -123,6 +149,7 @@ const SYSTEM_PROMPT = `
 - 如果用户未提供用户名，询问用户的 GitHub 用户名。
 - 始终保持友好、对话式的沟通风格。以清晰、有组织的方式呈现仓库信息。
 `;
+}
 
 // Zod schemas for tools
 const SearchSchema = z.object({
@@ -137,6 +164,10 @@ const SearchSchema = z.object({
 });
 
 const GetRepoSchema = z.object({
+  fullName: z.string(),
+});
+
+const GetReadmeSchema = z.object({
   fullName: z.string(),
 });
 
@@ -208,6 +239,7 @@ export async function POST(request: NextRequest) {
           "Search and filter repositories by query, language, topic, or star count",
         inputSchema: SearchSchema,
         execute: async (params: z.infer<typeof SearchSchema>) => {
+          const startTime = Date.now();
           console.log(`[${requestId}] Tool: searchRepositories, params:`, params);
           const result = await searchRepositories(repos, params || {});
           console.log(`[${requestId}] Tool: searchRepositories, found ${result.repos.length} repos`);
@@ -217,47 +249,27 @@ export async function POST(request: NextRequest) {
             formatted: formatReposForContext(result.repos),
             availableLanguages: result.availableLanguages,
             availableTopics: result.availableTopics.slice(0, 20),
+            __duration: Date.now() - startTime,
           };
         },
       }),
       getRepositoryByName: tool({
-        description: "Get detailed information about a specific repository",
-        inputSchema: GetRepoSchema,
-        execute: async ({ fullName }: z.infer<typeof GetRepoSchema>) => {
-          console.log(`[${requestId}] Tool: getRepositoryByName, fullName: ${fullName}`);
-          const repo = await getRepositoryByName(repos, fullName);
-          if (!repo) {
-            return { error: `Repository '${fullName}' not found` };
+        description: "获取某个项目的 README 文档内容，以便更好地了解项目",
+        inputSchema: GetReadmeSchema,
+        execute: async ({ fullName }: z.infer<typeof GetReadmeSchema>) => {
+          const startTime = Date.now();
+          console.log(`[${requestId}] Tool: getRepositoryReadme, fullName: ${fullName}`);
+          const result = await getRepositoryReadme(repos, fullName);
+          if (!result) {
+            return { error: `Repository '${fullName}' not found or README unavailable`, __duration: Date.now() - startTime };
           }
+          console.log(`${fullName} README: \n ${result}`);
+
           return {
-            repo,
-            formatted: formatReposForContext([repo]),
+            readme: result.readme,
+            html_url: result.html_url,
+            __duration: Date.now() - startTime,
           };
-        },
-      }),
-      getLanguages: tool({
-        description:
-          "Get all unique programming languages from the repositories",
-        inputSchema: z.object({}),
-        execute: async () => {
-          console.log(`[${requestId}] Tool: getLanguages`);
-          return { languages: getLanguages(repos) };
-        },
-      }),
-      getTopics: tool({
-        description: "Get all unique topics/tags from the repositories",
-        inputSchema: z.object({}),
-        execute: async () => {
-          console.log(`[${requestId}] Tool: getTopics`);
-          return { topics: getTopics(repos).slice(0, 50) };
-        },
-      }),
-      getStats: tool({
-        description: "Get statistics about the user's starred repositories",
-        inputSchema: z.object({}),
-        execute: async () => {
-          console.log(`[${requestId}] Tool: getStats`);
-          return getRepositoryStats(repos);
         },
       }),
       // Generative UI tool - displays repositories as UI cards with progressive loading
@@ -267,6 +279,7 @@ export async function POST(request: NextRequest) {
         inputSchema: DisplayReposSchema,
         // Use async generator to yield progressive tool results
         async* execute(params: z.infer<typeof DisplayReposSchema>) {
+          const startTime = Date.now();
           const repos = params.repos;
           const total = repos.length;
           const batchSize = 3;
@@ -313,6 +326,7 @@ export async function POST(request: NextRequest) {
             loaded: total,
             total,
             message: `已显示全部 ${total} 个仓库`,
+            __duration: Date.now() - startTime,
           };
           console.log(`[${requestId}] Tool: YIELD complete state (final)`);
           yield completeState;
@@ -330,10 +344,13 @@ export async function POST(request: NextRequest) {
     console.log(`[${requestId}] Using model: ${supportsReasoning ? "with reasoning" : "standard"}, provider: ${PROVIDER}`);
 
     // Build streamText options
+    const reposContext = formatReposForInitialContext(repos);
+    const systemPrompt = SYSTEM_PROMPT_TEMPLATE(username, repos.length, reposContext);
+
     const streamOptions: Parameters<typeof streamText>[0] = {
       model,
       tools,
-      system: `${SYSTEM_PROMPT}\n\nThe user's GitHub username is "${username}". They have ${repos.length} starred repositories. When helping them search, use the tools to find relevant matches.`,
+      system: systemPrompt,
       messages: modelMessages,
       stopWhen: stepCountIs(100),
     };
@@ -350,8 +367,15 @@ export async function POST(request: NextRequest) {
     // Use streamText for streaming response
     const result = streamText(streamOptions);
 
-    // Return streaming response
-    return result.toUIMessageStreamResponse();
+    // Return streaming response with token usage metadata
+    return result.toUIMessageStreamResponse({
+      messageMetadata: ({ part }) => {
+        // Send total usage when generation is finished
+        if (part.type === "finish") {
+          return { totalUsage: part.totalUsage };
+        }
+      },
+    });
   } catch (error) {
     console.error("Chat API error:", error);
 

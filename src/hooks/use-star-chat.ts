@@ -2,11 +2,12 @@
 
 import { useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
+import type { UIMessage, LanguageModelUsage } from "ai";
 import { DefaultChatTransport } from "ai";
 import type { GitHubRepo } from "@/lib/github/api";
 
-export interface ChatMessage extends UIMessage {}
+// Custom metadata type matching the server
+export interface ChatMessage extends UIMessage<{ totalUsage: LanguageModelUsage }> {}
 
 interface UseStarChatOptions {
   api?: string;
@@ -31,7 +32,7 @@ export function useStarChat({
     reposRef.current = repos;
   }, [repos]);
 
-  const chat = useChat<UIMessage>({
+  const chat = useChat<ChatMessage>({
     id: "star-chat",
     transport: new DefaultChatTransport({
       api,

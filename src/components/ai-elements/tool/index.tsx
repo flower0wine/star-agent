@@ -26,7 +26,21 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
 export function Tool({ className, ...props }: ToolProps) {
   return (
     <Collapsible
-      className={cn("group not-prose mb-4 w-full rounded-md border", className)}
+      className={cn("group not-prose mb-4 w-full rounded-md border overflow-y-auto max-h-[600px]", className)}
+      {...props}
+    />
+  );
+}
+
+export type ToolMainContentProps = ComponentProps<"div">;
+
+export function ToolMainContent({ className, ...props }: ToolMainContentProps) {
+  return (
+    <div
+      className={cn(
+        "max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent",
+        className
+      )}
       {...props}
     />
   );
@@ -37,6 +51,7 @@ export type ToolPart = ToolUIPart | DynamicToolUIPart;
 export type ToolHeaderProps = {
   title?: string;
   className?: string;
+  duration?: number;
 } & (
   | { type: ToolUIPart["type"]; state: ToolUIPart["state"]; toolName?: never }
   | {
@@ -81,6 +96,7 @@ export function ToolHeader({
   type,
   state,
   toolName,
+  duration,
   ...props
 }: ToolHeaderProps) {
   const derivedName
@@ -89,7 +105,7 @@ export function ToolHeader({
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full items-center justify-between gap-4 p-3",
+        "sticky top-0 z-10 flex w-full items-center justify-between gap-4 bg-background px-3 py-2",
         className
       )}
       {...props}
@@ -99,7 +115,14 @@ export function ToolHeader({
         <span className="font-medium text-sm">{title ?? derivedName}</span>
         {getStatusBadge(state)}
       </div>
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      <div className="flex items-center gap-2">
+        {duration !== undefined && (
+          <span className="text-xs text-muted-foreground">
+            {duration < 1000 ? `${duration}ms` : `${(duration / 1000).toFixed(1)}s`}
+          </span>
+        )}
+        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      </div>
     </CollapsibleTrigger>
   );
 }
@@ -110,7 +133,7 @@ export function ToolContent({ className, ...props }: ToolContentProps) {
   return (
     <CollapsibleContent
       className={cn(
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-4 p-4 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-4 p-4 pt-0 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
         className
       )}
       {...props}
