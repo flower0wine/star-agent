@@ -1,7 +1,13 @@
+/**
+ * Chat Page
+ *
+ * Generic chat page that supports multiple agents.
+ */
+
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useStarChat } from "@/hooks/use-star-chat";
+import { useState, useCallback } from "react";
+import { useAgentChat } from "@/hooks/use-agent-chat";
 import type { GitHubRepo } from "@/lib/github/api";
 import {
   Conversation,
@@ -9,33 +15,48 @@ import {
   ConversationEmptyState,
 } from "@/components/ai-elements/conversation";
 import {
-  StarLogin,
-  StarChatHeader,
   MessageRenderer,
   MessageLoadingIndicator,
 } from "@/components/star";
+import { AgentSelector } from "@/components/agents/agent-selector";
+import type { AgentId } from "@/components/agents/agent-selector";
+import { StarLogin } from "@/components/star/star-login";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { BotIcon, Loader2Icon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-export default function StarChatPage() {
+interface StarContext {
+  username: string;
+  repos: GitHubRepo[];
+}
+
+export default function ChatPage() {
+  // Agent selection
+  const [selectedAgent, setSelectedAgent] = useState<AgentId>("star");
+
+  // Star Agent state
+  const [starContext, setStarContext] = useState<StarContext | null>(null);
   const [username, setUsername] = useState("");
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [isVerified, setIsVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+
+  // Chat state
   const [input, setInput] = useState("");
 
   const { messages, sendMessage, status, error: chatError, regenerate }
-    = useStarChat({
+    = useAgentChat({
       api: "/api/chat",
-      username,
-      repos,
+      agentId: selectedAgent,
+      context: selectedAgent === "star"
+        ? { username, repos }
+        : {},
     });
 
-  // Check localStorage on mount for saved user data
-  useEffect(() => {
+  // Check localStorage on mount for saved user data (Star Agent)
+  useState(() => {
     const savedUsername = localStorage.getItem("star_username");
     const savedRepos = localStorage.getItem("star_repos");
 
@@ -45,16 +66,16 @@ export default function StarChatPage() {
         setRepos(JSON.parse(savedRepos));
         setIsVerified(true);
       } catch {
-        // Invalid data in localStorage, clear it
         localStorage.removeItem("star_username");
         localStorage.removeItem("star_repos");
       }
     }
-  }, []);
+  });
 
   const isChatLoading = status === "submitted" || status === "streaming";
   const isLastMessage = messages.length > 0;
 
+  // Handle username submission (Star Agent)
   const handleUsernameSubmit = useCallback(
     async (inputUsername: string) => {
       setIsLoading(true);
@@ -67,7 +88,6 @@ export default function StarChatPage() {
           throw new Error(data.error || "Failed to fetch repositories");
         }
         const data = await response.json();
-        // Store in localStorage and state to avoid re-fetching
         localStorage.setItem("star_username", inputUsername);
         localStorage.setItem("star_repos", JSON.stringify(data.repos));
         setRepos(data.repos);
@@ -84,6 +104,7 @@ export default function StarChatPage() {
     []
   );
 
+  // Handle logout (Star Agent)
   const handleLogout = useCallback(() => {
     localStorage.removeItem("star_username");
     localStorage.removeItem("star_repos");
@@ -93,6 +114,7 @@ export default function StarChatPage() {
     setInput("");
   }, []);
 
+  // Handle chat submit
   const handleChatSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -105,26 +127,42 @@ export default function StarChatPage() {
     [input, isChatLoading, sendMessage]
   );
 
-  // Show username input screen
-  if (!isVerified) {
+  // Show agent selector if no agent-specific requirements
+  // For now, we show the chat interface based on agent selection
+
+  // Star Agent requires username verification
+  if (selectedAgent === "star" && !isVerified) {
     return (
-      <StarLogin
-        onSubmit={handleUsernameSubmit}
-        error={usernameError}
-        isLoading={isLoading}
-      />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <AgentSelector
+          selectedAgentId={selectedAgent}
+          onSelect={(id) => setSelectedAgent(id as AgentId)}
+          className="mb-8"
+        />
+        <StarLogin
+          onSubmit={handleUsernameSubmit}
+          error={usernameError}
+          isLoading={isLoading}
+        />
+      </div>
     );
   }
 
-  // Show chat interface
+  // Chat interface
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <StarChatHeader
-        username={username}
-        messageCount={messages.length}
-        onLogout={handleLogout}
-      />
+      {/* Agent Selector */}
+      <div className="border-b px-4 py-3">
+        <AgentSelector
+          selectedAgentId={selectedAgent}
+          onSelect={(id) => {
+            setSelectedAgent(id as AgentId);
+            if (id !== "star") {
+              setIsVerified(false);
+            }
+          }}
+        />
+      </div>
 
       {/* Chat Area */}
       <Conversation className="flex-1 min-h-0">
@@ -132,8 +170,12 @@ export default function StarChatPage() {
           <AnimatePresence initial={false}>
             {messages.length === 0 ? (
               <ConversationEmptyState
-                title="Start exploring your stars"
-                description="Ask me anything about your repositories. I'll help you find what you're looking for."
+                title="Start chatting"
+                description={
+                  selectedAgent === "star"
+                    ? "Ask me anything about your repositories."
+                    : "Select an agent and start chatting."
+                }
                 icon={<BotIcon className="size-12" />}
               />
             ) : (
@@ -185,7 +227,11 @@ export default function StarChatPage() {
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me about your repositories..."
+              placeholder={
+                selectedAgent === "star"
+                  ? "Ask me about your repositories..."
+                  : "Type your message..."
+              }
               className="min-h-[52px] w-full resize-none rounded-xl border bg-background py-3 pl-4 pr-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               rows={1}
               onKeyDown={(e) => {
