@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import type { GitHubRepo } from "@/lib/github/api";
 import {
@@ -50,13 +50,13 @@ export default function ChatPage() {
     = useAgentChat({
       api: "/api/chat",
       agentId: selectedAgent,
-      context: selectedAgent === "star"
+      context: selectedAgent === "star" || selectedAgent === "master"
         ? { username, repos }
         : {},
     });
 
   // Check localStorage on mount for saved user data (Star Agent)
-  useState(() => {
+  useEffect(() => {
     const savedUsername = localStorage.getItem("star_username");
     const savedRepos = localStorage.getItem("star_repos");
 
@@ -70,7 +70,7 @@ export default function ChatPage() {
         localStorage.removeItem("star_repos");
       }
     }
-  });
+  }, []);
 
   const isChatLoading = status === "submitted" || status === "streaming";
   const isLastMessage = messages.length > 0;
@@ -130,8 +130,8 @@ export default function ChatPage() {
   // Show agent selector if no agent-specific requirements
   // For now, we show the chat interface based on agent selection
 
-  // Star Agent requires username verification
-  if (selectedAgent === "star" && !isVerified) {
+  // Star Agent and Master Agent require username verification
+  if ((selectedAgent === "star" || selectedAgent === "master") && !isVerified) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <AgentSelector
@@ -157,7 +157,7 @@ export default function ChatPage() {
           selectedAgentId={selectedAgent}
           onSelect={(id) => {
             setSelectedAgent(id as AgentId);
-            if (id !== "star") {
+            if (id !== "star" && id !== "master") {
               setIsVerified(false);
             }
           }}

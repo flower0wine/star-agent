@@ -6,7 +6,7 @@
 
 "use client";
 
-import { StarIcon, GlobeIcon } from "lucide-react";
+import { StarIcon, GlobeIcon, WorkflowIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -20,6 +20,12 @@ export const AVAILABLE_AGENTS = [
     name: "Star Agent",
     description: "Find repositories from your GitHub stars",
     icon: <StarIcon className="size-5" />,
+  },
+  {
+    id: "master",
+    name: "Master Agent",
+    description: "智能分配任务给子 Agent 处理大型仓库列表",
+    icon: <WorkflowIcon className="size-5" />,
   },
   // Future agents can be added here:
   // {

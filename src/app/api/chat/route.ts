@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 
 import { getModelInfo } from "./model";
 import { handleStarAgent } from "./handler";
+import { handleMasterAgent } from "./handler-master";
 
 // Re-export types for external usage
 export type { ChatMessage } from "./types";
@@ -43,6 +44,11 @@ export async function POST(request: NextRequest) {
     // Handle Star Agent
     if (agentId === "star") {
       return handleStarAgent(requestId, body);
+    }
+
+    // Handle Master Agent
+    if (agentId === "master") {
+      return handleMasterAgent(requestId, body);
     }
 
     // Unknown agent
