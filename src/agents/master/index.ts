@@ -31,7 +31,7 @@ export function createMasterAgent(
   // Create tools
   const tools = {
     getAllRepos: createGetAllReposTool(repos),
-    createSubAgent: createCreateSubAgentTool(repos, model, username),
+    createSubAgent: createCreateSubAgentTool(repos, username),
     displayRepositories: createDisplayRepositoriesTool(repos),
   };
 

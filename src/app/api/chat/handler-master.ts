@@ -2,6 +2,8 @@
  * Master Agent Handler
  *
  * Handles requests for the Master Agent (orchestrates sub-agents)
+ *
+ * KEY CHANGE: Now uses multi-stream response to support parallel sub-agent execution.
  */
 
 import { convertToModelMessages, streamText, stepCountIs } from "ai";
@@ -12,6 +14,7 @@ import { createMasterAgent } from "@/agents/master";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody } from "./types";
+import { createMultiStreamResponse } from "@/lib/agents/multi-stream";
 
 /**
  * Handle Master Agent requests
@@ -72,12 +75,17 @@ export async function handleMasterAgent(
     repos: finalRepos,
   });
 
+  console.log(`[${requestId}] Tools created: ${Object.keys(tools).join(", ")}`);
+  console.log(`[${requestId}] System prompt length: ${systemPrompt.length}`);
+
   // Convert messages to model format
   // ignoreIncompleteToolCalls: true to handle cases where user stops mid-tool-call
+  console.log(`[${requestId}] Converting messages...`);
   const modelMessages = await convertToModelMessages(body.messages, {
     tools,
     ignoreIncompleteToolCalls: true,
   });
+  console.log(`[${requestId}] Messages converted, count: ${modelMessages.length}`);
 
   // Build streamText options
   const streamOptions: Parameters<typeof streamText>[0] = {
@@ -98,15 +106,13 @@ export async function handleMasterAgent(
   }
 
   // Use streamText for streaming response
-  const result = streamText(streamOptions);
+  console.log(`[${requestId}] Creating streamText...`);
+  const masterStream = streamText(streamOptions);
+  console.log(`[${requestId}] streamText created, calling createMultiStreamResponse...`);
 
-  // Return streaming response with token usage metadata
-  return result.toUIMessageStreamResponse({
-    messageMetadata: ({ part }) => {
-      // Send total usage when generation is finished
-      if (part.type === "finish") {
-        return { totalUsage: part.totalUsage };
-      }
-    },
-  });
+  // Return multi-stream response (merges master + sub-agent streams)
+  const response = await createMultiStreamResponse(masterStream, requestId);
+  console.log(`[${requestId}] MultiStream response created, status: ${response.status}`);
+
+  return response;
 }

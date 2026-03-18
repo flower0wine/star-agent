@@ -48,7 +48,10 @@ export async function POST(request: NextRequest) {
 
     // Handle Master Agent
     if (agentId === "master") {
-      return handleMasterAgent(requestId, body);
+      console.log(`[${requestId}] Calling handleMasterAgent...`);
+      const result = await handleMasterAgent(requestId, body);
+      console.log(`[${requestId}] handleMasterAgent returned, status: ${result.status}`);
+      return result;
     }
 
     // Unknown agent

@@ -2,13 +2,15 @@
  * Chat Page
  *
  * Generic chat page that supports multiple agents.
+ * Enhanced with SubAgentPanel for Master Agent.
  */
 
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import type { GitHubRepo } from "@/lib/github/api";
+import type { ChatOnDataCallback, UIMessage } from "ai";
 import {
   Conversation,
   ConversationContent,
@@ -18,13 +20,15 @@ import {
   MessageRenderer,
   MessageLoadingIndicator,
 } from "@/components/star";
+import { SubAgentPanel } from "@/components/star/sub-agent-panel";
 import { AgentSelector } from "@/components/agents/agent-selector";
 import type { AgentId } from "@/components/agents/agent-selector";
 import { StarLogin } from "@/components/star/star-login";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { BotIcon, SquareIcon, Loader2Icon } from "lucide-react";
+import { BotIcon, Loader2Icon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import type { SubAgentCard } from "@/types/agent";
 
 interface StarContext {
   username: string;
@@ -43,16 +47,98 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
+  // Sub-agent cards state (for Master Agent)
+  const [subAgentCards, setSubAgentCards] = useState<Map<string, SubAgentCard>>(
+    new Map()
+  );
+
   // Chat state
   const [input, setInput] = useState("");
+
+  // Define sub-agent progress data type
+  interface SubAgentProgressData {
+    taskId: string;
+    progressType?: string;
+    content?: string;
+    error?: string;
+    result?: string;
+    progress?: number;
+  }
+
+  // Handler for custom data parts (sub-agent progress)
+  const handleData: ChatOnDataCallback<UIMessage<{ totalUsage: unknown }>> = useCallback(
+    (dataPart) => {
+      // Check if this is a data-subagent event
+      if (dataPart.type !== "data-subagent")
+        return;
+
+      const subData = dataPart.data as SubAgentProgressData;
+      const taskId = subData.taskId;
+      if (!taskId)
+        return;
+
+      const { progressType, content, error, result, progress } = subData;
+
+      console.log("[ChatPage] Sub-agent progress:", taskId, progressType);
+
+      setSubAgentCards((prev) => {
+        const current = prev.get(taskId);
+
+        // Create or update card
+        const card: SubAgentCard = current
+          ? {
+              ...current,
+              status:
+                progressType === "complete"
+                  ? "completed"
+                  : progressType === "error"
+                    ? "failed"
+                    : progressType === "start"
+                      || progressType === "progress"
+                      || progressType === "text"
+                      ? "running"
+                      : current.status,
+              progress: progress ?? current.progress,
+              currentOutput: content
+                ? (current.currentOutput || "") + content
+                : current.currentOutput,
+              finalResult: result ?? current.finalResult,
+              error: error ?? current.error,
+            }
+          : {
+              taskId,
+              status:
+                progressType === "complete"
+                  ? "completed"
+                  : progressType === "error"
+                    ? "failed"
+                    : "pending",
+              task: "",
+              reposCount: 0,
+              progress: progress ?? 0,
+              currentOutput: content,
+              finalResult: result,
+              error,
+            };
+
+        const next = new Map(prev);
+        next.set(taskId, card);
+
+        return next;
+      });
+    },
+    []
+  );
 
   const { messages, sendMessage, status, error: chatError, regenerate, stop }
     = useAgentChat({
       api: "/api/chat",
       agentId: selectedAgent,
-      context: selectedAgent === "star" || selectedAgent === "master"
-        ? { username, repos }
-        : {},
+      context:
+        selectedAgent === "star" || selectedAgent === "master"
+          ? { username, repos }
+          : {},
+      onData: handleData,
     });
 
   // Check localStorage on mount for saved user data (Star Agent)
@@ -71,6 +157,63 @@ export default function ChatPage() {
       }
     }
   }, []);
+
+  // Extract sub-agent task IDs from messages (for Master Agent)
+  useEffect(() => {
+    if (selectedAgent !== "master") {
+      setSubAgentCards(new Map());
+      return;
+    }
+
+    // Scan messages for createSubAgent tool calls
+    messages.forEach((message) => {
+      if (message.role !== "assistant")
+        return;
+
+      // Access parts - each part could be a tool call
+      message.parts.forEach((part: unknown) => {
+        if (!part || typeof part !== "object")
+          return;
+
+        const p = part as Record<string, unknown>;
+
+        // Check for tool call result with taskId
+        if (
+          p.type === "tool-result"
+          && p.toolCallId
+          && p.result
+          && typeof p.result === "object"
+        ) {
+          const result = p.result as Record<string, unknown>;
+
+          // Check if this is a createSubAgent result
+          if (
+            result.taskId
+            && typeof result.taskId === "string"
+            && result.taskId.startsWith("subagent-")
+          ) {
+            // Add card if not exists
+            setSubAgentCards((prev) => {
+              if (prev.has(result.taskId as string))
+                return prev;
+
+              const next = new Map(prev);
+              next.set(result.taskId as string, {
+                taskId: result.taskId as string,
+                status: "running",
+                task: (result.message as string) || "处理中...",
+                reposCount: (result.reposCount as number) || 0,
+                progress: 0,
+                currentOutput: "",
+              });
+
+              return next;
+            });
+          }
+        }
+      });
+    });
+  }, [messages, selectedAgent]);
 
   const isChatLoading = status === "submitted" || status === "streaming";
   const isLastMessage = messages.length > 0;
@@ -112,6 +255,7 @@ export default function ChatPage() {
     setRepos([]);
     setIsVerified(false);
     setInput("");
+    setSubAgentCards(new Map());
   }, []);
 
   // Handle chat submit
@@ -153,11 +297,14 @@ export default function ChatPage() {
     );
   }
 
+  // Show logout button for Master Agent
+  const showLogout = selectedAgent === "master" || selectedAgent === "star";
+
   // Chat interface
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Agent Selector */}
-      <div className="border-b px-4 py-3">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-4 py-3">
         <AgentSelector
           selectedAgentId={selectedAgent}
           onSelect={(id) => {
@@ -167,127 +314,154 @@ export default function ChatPage() {
             }
           }}
         />
+        {showLogout && (
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
+            退出登录
+          </Button>
+        )}
       </div>
 
-      {/* Chat Area */}
-      <Conversation className="flex-1 min-h-0">
-        <ConversationContent>
-          <AnimatePresence initial={false}>
-            {messages.length === 0 ? (
-              <ConversationEmptyState
-                title="Start chatting"
-                description={
-                  selectedAgent === "star"
-                    ? "Ask me anything about your repositories."
-                    : "Select an agent and start chatting."
-                }
-                icon={<BotIcon className="size-12" />}
-              />
-            ) : (
-              messages.map((message, index) => (
+      {/* Main Content */}
+      <div className="flex flex-1 min-h-0">
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <Conversation className="flex-1 min-h-0">
+            <ConversationContent>
+              <AnimatePresence initial={false}>
+                {messages.length === 0 ? (
+                  <ConversationEmptyState
+                    title="Start chatting"
+                    description={
+                      selectedAgent === "star"
+                        ? "Ask me anything about your repositories."
+                        : "Select an agent and start chatting."
+                    }
+                    icon={<BotIcon className="size-12" />}
+                  />
+                ) : (
+                  messages.map((message, index) => (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <MessageRenderer
+                        message={message}
+                        isStreaming={
+                          isChatLoading && index === messages.length - 1
+                        }
+                        isLastMessage={index === messages.length - 1}
+                        onReload={
+                          index === messages.length - 1 ? regenerate : undefined
+                        }
+                      />
+                    </motion.div>
+                  ))
+                )}
+              </AnimatePresence>
+
+              {chatError && (
                 <motion.div
-                  key={message.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
+                  className="rounded-md bg-destructive/10 p-4 text-sm text-destructive"
                 >
-                  <MessageRenderer
-                    message={message}
-                    isStreaming={isChatLoading && index === messages.length - 1}
-                    isLastMessage={index === messages.length - 1}
-                    onReload={
-                      index === messages.length - 1 ? regenerate : undefined
-                    }
-                  />
+                  Error: {chatError.message || String(chatError)}
                 </motion.div>
-              ))
-            )}
-          </AnimatePresence>
+              )}
 
-          {chatError && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-md bg-destructive/10 p-4 text-sm text-destructive"
-            >
-              Error: {chatError.message || String(chatError)}
-            </motion.div>
-          )}
+              {isChatLoading && !isLastMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <MessageLoadingIndicator />
+                </motion.div>
+              )}
+            </ConversationContent>
+          </Conversation>
 
-          {isChatLoading && !isLastMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <MessageLoadingIndicator />
-            </motion.div>
-          )}
-        </ConversationContent>
-      </Conversation>
+          {/* Input Area */}
+          <div className="sticky bottom-0 border-t bg-background px-4 py-3">
+            <div className="mx-auto max-w-3xl">
+              <form onSubmit={handleChatSubmit} className="relative">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={
+                    selectedAgent === "star"
+                      ? "Ask me about your repositories..."
+                      : "Type your message..."
+                  }
+                  className="min-h-[52px] w-full resize-none rounded-xl border bg-background py-3 pl-4 pr-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  rows={1}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChatSubmit(e);
+                    }
+                  }}
+                />
+                <Button
+                  type={isChatLoading ? "button" : "submit"}
+                  size="icon"
+                  className="absolute bottom-2 right-2 size-8"
+                  disabled={!input.trim() && !isChatLoading}
+                  onClick={isChatLoading ? handleStop : undefined}
+                  aria-label={isChatLoading ? "Stop generating" : "Send message"}
+                >
+                  {isChatLoading ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{
+                        duration: 1,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
+                    >
+                      <Loader2Icon className="size-4" />
+                    </motion.div>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="size-4"
+                    >
+                      <path d="M5 12h14" />
+                      <path d="m12 5 7 7-7 7" />
+                    </svg>
+                  )}
+                </Button>
+              </form>
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                AI can make mistakes. Please verify important information.
+              </p>
+            </div>
+          </div>
+        </div>
 
-      {/* Input Area */}
-      <div className="sticky bottom-0 border-t bg-background px-4 py-3">
-        <div className="mx-auto max-w-3xl">
-          <form onSubmit={handleChatSubmit} className="relative">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                selectedAgent === "star"
-                  ? "Ask me about your repositories..."
-                  : "Type your message..."
-              }
-              className="min-h-[52px] w-full resize-none rounded-xl border bg-background py-3 pl-4 pr-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              rows={1}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleChatSubmit(e);
-                }
+        {/* Sub-Agent Panel (only for Master Agent) */}
+        {selectedAgent === "master" && (
+          <div className="w-80 border-l bg-background shrink-0">
+            <SubAgentPanel
+              agents={subAgentCards}
+              onExpand={(taskId) => {
+                console.log("Expand agent:", taskId);
+              }}
+              onCollapse={(taskId) => {
+                console.log("Collapse agent:", taskId);
               }}
             />
-            <Button
-              type={isChatLoading ? "button" : "submit"}
-              size="icon"
-              className="absolute bottom-2 right-2 size-8"
-              disabled={!input.trim() && !isChatLoading}
-              onClick={isChatLoading ? handleStop : undefined}
-              aria-label={isChatLoading ? "Stop generating" : "Send message"}
-            >
-              {isChatLoading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 1,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                >
-                  <Loader2Icon className="size-4" />
-                </motion.div>
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="size-4"
-                >
-                  <path d="M5 12h14" />
-                  <path d="m12 5 7 7-7 7" />
-                </svg>
-              )}
-            </Button>
-          </form>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            AI can make mistakes. Please verify important information.
-          </p>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

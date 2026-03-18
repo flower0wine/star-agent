@@ -27,6 +27,8 @@ interface UseAgentChatOptions {
   agentId?: string;
   /** Additional context to pass to the agent */
   context?: Record<string, unknown>;
+  /** Callback for custom data parts (e.g., sub-agent progress) */
+  onData?: (data: any) => void;
 }
 
 /**
@@ -47,6 +49,7 @@ export function useAgentChat({
   api = "/api/chat",
   agentId = "star",
   context = {},
+  onData,
 }: UseAgentChatOptions = {}) {
   const contextRef = useRef(context);
 
@@ -61,6 +64,7 @@ export function useAgentChat({
       api,
       credentials: "same-origin",
     }),
+    onData,
   });
 
   /**
