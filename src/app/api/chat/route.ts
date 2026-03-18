@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     // Handle Star Agent
     if (agentId === "star") {
-      return handleStarAgent(requestId, body);
+      return handleStarAgent(requestId, body, request.signal);
     }
 
     // Handle Master Agent

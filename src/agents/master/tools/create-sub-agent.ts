@@ -14,8 +14,10 @@ import { createGetRepositoryReadmeTool } from "@/agents/star/tools/get-readme";
 export interface CreateSubAgentInput {
   /** The task to delegate to the sub-agent */
   task: string;
-  /** Repositories to process (slice of total repos) */
-  repos: GitHubRepo[];
+  /** Start index of repos to process (0-based, inclusive) */
+  startIndex: number;
+  /** End index of repos to process (exclusive) */
+  endIndex: number;
 }
 
 export interface CreateSubAgentOutput {
@@ -64,39 +66,27 @@ export function createCreateSubAgentTool(
   username: string
 ) {
   return tool({
-    description: "创建子 Agent 来处理部分仓库，当仓库数量超过 200 时使用此工具",
+    description: "当需要处理的仓库数量大于 200 时，使用该工具创建子 Agent 来分配处理",
     inputSchema: z.object({
       task: z
         .string()
-        .describe("要分配给子 Agent 的任务描述，如「找出 React 相关的仓库」"),
-      repos: z
-        .array(
-          z.object({
-            id: z.number(),
-            name: z.string(),
-            full_name: z.string(),
-            description: z.string().nullable(),
-            html_url: z.string(),
-            stargazers_count: z.number(),
-            forks_count: z.number(),
-            language: z.string().nullable(),
-            topics: z.array(z.string()),
-            updated_at: z.string(),
-            owner: z.object({
-              login: z.string(),
-              avatar_url: z.string(),
-              html_url: z.string(),
-            }),
-            license: z.object({ spdx_id: z.string() }).nullable(),
-            visibility: z.string(),
-            watchers_count: z.number(),
-          })
-        )
-        .describe("分配给子 Agent 的仓库列表"),
+        .describe("要分配给子 Agent 的任务描述，如「找出所有的 AI 相关的仓库」"),
+      startIndex: z
+        .number()
+        .int()
+        .min(0)
+        .describe("要处理的仓库起始索引（包含初始索引）"),
+      endIndex: z
+        .number()
+        .int()
+        .min(1)
+        .describe("要处理的仓库结束索引（不包含结束索引）"),
     }),
-    execute: async (params: { task: string; repos: unknown[] }): Promise<CreateSubAgentOutput> => {
-      const { task } = params;
-      const subRepos = params.repos as GitHubRepo[];
+    execute: async (params: { task: string; startIndex: number; endIndex: number }): Promise<CreateSubAgentOutput> => {
+      const { task, startIndex, endIndex } = params;
+
+      // Get repos slice by index range
+      const subRepos = repos.slice(startIndex, endIndex);
 
       // Create sub-agent tools (without displayRepositories)
       const subAgentTools = createSubAgentTools(subRepos);
@@ -106,28 +96,32 @@ export function createCreateSubAgentTool(
 
       // Create sub-agent system prompt
       const subAgentSystemPrompt = `
-  你是一个热情且能力较强的助手，擅长使用工具帮助用户解决问题。
+你是一个热情且能力较强的助手，擅长使用工具帮助用户解决问题，遇到非常模糊的问题会主动询问用户。
 
-  # 用户信息
-  - GitHub 用户名: ${username}
-  - 仓库总数: ${subRepos.length} 个
+# 用户信息
+- GitHub 用户名: ${username}
+- 仓库总数: ${repos.length} 个
 
-  # 用户仓库列表（分配给你的部分）
-  以下是分配给你的仓库列表：
+# 用户仓库列表（完整）
+以下是用户的完整仓库列表，请先阅读这些信息，这对你回答问题非常重要：
 
-  ${reposContext}
+${reposContext}
 
-  # 工作职责
-  - 根据用户的要求，在分配的仓库中找出符合条件的仓库
-  - 使用 searchRepositories 工具搜索仓库
-  - 使用 getRepositoryReadme 工具获取仓库的 README 了解详情
+# 工作职责
 
-  # 约束
-  - 不要使用 displayRepositories 工具展示仓库，结果会以文本形式返回给主 Agent
+- 获取他们的星标仓库列表，并帮助他们找到想要的内容
+- 通过提问澄清需求，缩小搜索范围
+- 以清晰有条理的方式展示相关的仓库信息
 
-  # 注意事项
-  - 始终保持友好、对话式的沟通风格
-      `.trim();
+# 约束
+
+- 当你找到匹配的仓库时，直接将你选择的结果输出，不要输出其他的内容。
+
+# 注意事项
+
+- 如果用户未提供用户名，询问用户的 GitHub 用户名。
+- 始终保持友好、对话式的沟通风格。以清晰、有组织的方式呈现仓库信息。
+`.trim();
 
       // Create sub-agent using ToolLoopAgent
       const subAgent = new ToolLoopAgent({

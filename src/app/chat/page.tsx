@@ -23,7 +23,7 @@ import type { AgentId } from "@/components/agents/agent-selector";
 import { StarLogin } from "@/components/star/star-login";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { BotIcon, Loader2Icon } from "lucide-react";
+import { BotIcon, SquareIcon, Loader2Icon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface StarContext {
@@ -46,7 +46,7 @@ export default function ChatPage() {
   // Chat state
   const [input, setInput] = useState("");
 
-  const { messages, sendMessage, status, error: chatError, regenerate }
+  const { messages, sendMessage, status, error: chatError, regenerate, stop }
     = useAgentChat({
       api: "/api/chat",
       agentId: selectedAgent,
@@ -126,6 +126,11 @@ export default function ChatPage() {
     },
     [input, isChatLoading, sendMessage]
   );
+
+  // Handle stop generation
+  const handleStop = useCallback(() => {
+    stop();
+  }, [stop]);
 
   // Show agent selector if no agent-specific requirements
   // For now, we show the chat interface based on agent selection
@@ -242,13 +247,24 @@ export default function ChatPage() {
               }}
             />
             <Button
-              type="submit"
+              type={isChatLoading ? "button" : "submit"}
               size="icon"
               className="absolute bottom-2 right-2 size-8"
-              disabled={!input.trim() || isChatLoading}
+              disabled={!input.trim() && !isChatLoading}
+              onClick={isChatLoading ? handleStop : undefined}
+              aria-label={isChatLoading ? "Stop generating" : "Send message"}
             >
               {isChatLoading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{
+                    duration: 1,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
+                >
+                  <Loader2Icon className="size-4" />
+                </motion.div>
               ) : (
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

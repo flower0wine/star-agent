@@ -17,7 +17,7 @@ export function createStarTools(repos: GitHubRepo[]) {
   return {
     searchRepositories: createSearchRepositoriesTool(repos),
     getRepositoryReadme: createGetRepositoryReadmeTool(repos),
-    displayRepositories: createDisplayRepositoriesTool(),
+    displayRepositories: createDisplayRepositoriesTool(repos),
   };
 }
 

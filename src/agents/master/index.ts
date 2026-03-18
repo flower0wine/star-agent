@@ -7,11 +7,13 @@
 
 import type { AgentConfig } from "@/lib/agents/registry";
 import type { GitHubRepo } from "@/lib/github/api";
+import { formatReposForInitialContext } from "@/lib/github/utils";
 import { masterAgent } from "./config";
 import { getMasterSystemPrompt } from "./prompt";
 import type { MasterAgentContext } from "./prompt";
 import { createGetAllReposTool, createCreateSubAgentTool } from "./tools";
 import type { ModelInstance } from "@/app/api/chat/model";
+import { createDisplayRepositoriesTool } from "../star/tools/display-repositories";
 
 /**
  * Create Master Agent configuration
@@ -30,6 +32,7 @@ export function createMasterAgent(
   const tools = {
     getAllRepos: createGetAllReposTool(repos),
     createSubAgent: createCreateSubAgentTool(repos, model, username),
+    displayRepositories: createDisplayRepositoriesTool(repos),
   };
 
   return {
@@ -48,25 +51,6 @@ export function createMasterAgent(
       return getMasterSystemPrompt(masterContext);
     },
   };
-}
-
-/**
- * Format repos for initial context (used in system prompt)
- * Exported for external use
- */
-export function formatReposForInitialContext(repos: GitHubRepo[]): string {
-  return repos
-    .map((repo) => {
-      const parts = [
-        repo.full_name,
-        repo.description || "无描述",
-        `⭐${repo.stargazers_count}`,
-        repo.language || "",
-        repo.topics.join(", "),
-      ];
-      return parts.join(" | ");
-    })
-    .join("\n");
 }
 
 // Re-export for convenience

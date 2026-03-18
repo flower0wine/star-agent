@@ -57,13 +57,13 @@ export async function handleMasterAgent(
   }
 
   // Get model based on provider
-  const { model, supportsReasoning } = getModel();
+  const modelInstance = getModel();
   console.log(
-    `[${requestId}] Using model: ${supportsReasoning ? "with reasoning" : "standard"}`
+    `[${requestId}] Using model: ${modelInstance.supportsReasoning ? "with reasoning" : "standard"}`
   );
 
   // Create Master Agent with repos and model
-  const masterAgent = createMasterAgent(finalRepos, model, username);
+  const masterAgent = createMasterAgent(finalRepos, modelInstance, username);
 
   // Get tools and system prompt from agent
   const tools = masterAgent.getTools({});
@@ -73,11 +73,15 @@ export async function handleMasterAgent(
   });
 
   // Convert messages to model format
-  const modelMessages = await convertToModelMessages(body.messages);
+  // ignoreIncompleteToolCalls: true to handle cases where user stops mid-tool-call
+  const modelMessages = await convertToModelMessages(body.messages, {
+    tools,
+    ignoreIncompleteToolCalls: true,
+  });
 
   // Build streamText options
   const streamOptions: Parameters<typeof streamText>[0] = {
-    model,
+    model: modelInstance.model,
     tools,
     system: systemPrompt,
     messages: modelMessages,
@@ -85,7 +89,7 @@ export async function handleMasterAgent(
   };
 
   // Add reasoning support for models that support it
-  if (supportsReasoning) {
+  if (modelInstance.supportsReasoning) {
     Object.assign(streamOptions, {
       providerOptions: {
         reasoningSummary: "detailed" as const,

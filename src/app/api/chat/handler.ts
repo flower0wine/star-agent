@@ -8,7 +8,8 @@ import { convertToModelMessages, streamText, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
-import { createStarAgent, formatReposForInitialContext } from "@/agents/star";
+import { formatReposForInitialContext } from "@/lib/github/utils";
+import { createStarAgent } from "@/agents/star";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody } from "./types";
@@ -17,11 +18,13 @@ import type { ChatRequestBody } from "./types";
  * Handle Star Agent requests
  * @param requestId Request tracking ID
  * @param body Request body containing messages and context
+ * @param abortSignal Signal to abort the request
  * @returns Streaming response
  */
 export async function handleStarAgent(
   requestId: string,
-  body: ChatRequestBody
+  body: ChatRequestBody,
+  abortSignal?: AbortSignal
 ): Promise<Response> {
   // Support both legacy top-level fields and new context-based fields
   const username = body.username || body.context?.username;
@@ -69,7 +72,11 @@ export async function handleStarAgent(
   });
 
   // Convert messages to model format
-  const modelMessages = await convertToModelMessages(body.messages);
+  // ignoreIncompleteToolCalls: true to handle cases where user stops mid-tool-call
+  const modelMessages = await convertToModelMessages(body.messages, {
+    tools,
+    ignoreIncompleteToolCalls: true,
+  });
 
   // Get model based on provider
   const { model, supportsReasoning } = getModel();
@@ -84,6 +91,7 @@ export async function handleStarAgent(
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
+    abortSignal,
   };
 
   // Add reasoning support for models that support it

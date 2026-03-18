@@ -25,9 +25,12 @@ export interface GetAllReposOutput {
  */
 export function createGetAllReposTool(repos: GitHubRepo[]) {
   return tool({
-    description: "获取所有仓库列表，仅在仓库数量少于等于 200 时使用",
+    description: "获取所有仓库列表，在仓库数量小于 200 时可以调用，大于 200 时使用会提示禁止调用",
     inputSchema: z.object({}),
     execute: async (): Promise<GetAllReposOutput> => {
+      if (repos.length > 200) {
+        throw new Error("repos 数量超过 200，禁止调用");
+      }
       return {
         repos: repos
           .map((repo) => {
