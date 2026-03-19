@@ -51,8 +51,9 @@ export function createCreateSubAgentTool(
         .min(1)
         .describe("要处理的仓库结束索引（不包含结束索引）"),
     }),
-    execute: async (params: CreateSubAgentInput): Promise<CreateSubAgentTaskOutput> => {
+    execute: async (params: CreateSubAgentInput): Promise<CreateSubAgentTaskOutput & { __duration: number }> => {
       const { task, startIndex, endIndex } = params;
+      const startTime = Date.now();
 
       // Get repos slice by index range
       const subRepos = repos.slice(startIndex, endIndex);
@@ -74,7 +75,10 @@ export function createCreateSubAgentTool(
         sessionId
       );
 
-      return result;
+      return {
+        ...result,
+        __duration: Date.now() - startTime,
+      };
     },
   });
 }

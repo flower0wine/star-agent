@@ -139,13 +139,16 @@ export function createDisplayRepositoriesTool(repos: GitHubRepo[]) {
       }
 
       // Step 3: Final complete state
+      const duration = Date.now() - startTime;
+      // eslint-disable-next-line no-console
+      console.log(`[displayRepositoriesTool] Executed in ${duration}ms, repos: ${displayRepos.length}`);
       const completeState = {
         state: "complete" as const,
         repos: displayRepos,
         loaded: total,
         total,
         message: `已显示全部 ${total} 个仓库`,
-        __duration: Date.now() - startTime,
+        __duration: duration,
       };
       yield completeState;
     },

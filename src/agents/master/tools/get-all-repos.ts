@@ -16,6 +16,7 @@ export interface GetAllReposOutput {
   repos: string;
   totalCount: number;
   message: string;
+  __duration?: number;
 }
 
 /**
@@ -28,10 +29,11 @@ export function createGetAllReposTool(repos: GitHubRepo[]) {
     description: "获取所有仓库列表，在仓库数量小于 200 时可以调用，大于 200 时使用会提示禁止调用",
     inputSchema: z.object({}),
     execute: async (): Promise<GetAllReposOutput> => {
+      const startTime = Date.now();
       if (repos.length > 200) {
         throw new Error("repos 数量超过 200，禁止调用");
       }
-      return {
+      const result = {
         repos: repos
           .map((repo) => {
             const parts = [
@@ -46,7 +48,11 @@ export function createGetAllReposTool(repos: GitHubRepo[]) {
           .join("\n"),
         totalCount: repos.length,
         message: `已获取全部 ${repos.length} 个仓库`,
+        __duration: Date.now() - startTime,
       };
+      // eslint-disable-next-line no-console
+      console.log(`[getAllReposTool] Executed in ${result.__duration}ms, repos: ${result.totalCount}`);
+      return result;
     },
   });
 }

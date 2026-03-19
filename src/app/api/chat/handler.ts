@@ -92,6 +92,21 @@ export async function handleStarAgent(
     messages: modelMessages,
     stopWhen: stepCountIs(100),
     abortSignal,
+    // 添加工具调用生命周期回调，用于记录工具执行时间
+    experimental_onToolCallStart: ({ toolCall }) => {
+      console.log(`[${requestId}] Tool started: ${toolCall.toolName}`, {
+        toolCallId: toolCall.toolCallId,
+        input: toolCall.input,
+      });
+    },
+    experimental_onToolCallFinish: ({ toolCall, durationMs, success, error }) => {
+      console.log(`[${requestId}] Tool finished: ${toolCall.toolName}`, {
+        toolCallId: toolCall.toolCallId,
+        durationMs,
+        success,
+        error: error ? String(error) : undefined,
+      });
+    },
   };
 
   // Add reasoning support for models that support it
@@ -111,6 +126,7 @@ export async function handleStarAgent(
     messageMetadata: ({ part }) => {
       // Send total usage when generation is finished
       if (part.type === "finish") {
+        console.log(`[${requestId}] Token usage:`, part.totalUsage);
         return { totalUsage: part.totalUsage };
       }
     },

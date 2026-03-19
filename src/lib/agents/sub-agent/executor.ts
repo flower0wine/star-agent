@@ -147,11 +147,7 @@ export async function executeSubAgentTask(
 
     // Process streaming output
     console.log(`[Executor/${task.id}] Starting iteration over stream...`);
-    let chunkCount = 0;
     for await (const chunk of stream) {
-      chunkCount++;
-      console.log(`[Executor/${task.id}] Chunk #${chunkCount}:`, JSON.stringify(chunk).slice(0, 200));
-      
       if (abortSignal.aborted) {
         console.log(`[Executor/${task.id}] Aborted, breaking`);
         break;
