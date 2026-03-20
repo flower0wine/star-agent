@@ -40,7 +40,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, memo } from "react";
 
 // Helper type for tool output with repos
 interface RepoToolOutput {
@@ -106,13 +106,15 @@ export interface MessageRendererProps {
  * Structure:
  * - Reasoning (outside, collapsible, with BrainIcon)
  * - MessageContent (contains tool calls and text response)
+ *
+ * Performance: memoized to only re-render when message content actually changes
  */
-export function MessageRenderer({
+export const MessageRenderer = memo(({
   message,
   isStreaming = false,
   isLastMessage = false,
   onReload,
-}: MessageRendererProps) {
+}: MessageRendererProps) => {
   const [copied, setCopied] = useState(false);
 
   // Extract text content for copy functionality
@@ -311,7 +313,7 @@ export function MessageRenderer({
       )}
     </Message>
   );
-}
+});
 
 /**
  * Avatar component for user/assistant messages

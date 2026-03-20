@@ -84,7 +84,7 @@ export default function ChatPage() {
 
       const { progressType, chunk, error, result, progress } = subData;
 
-      // Handle message-chunk type for streaming messages
+      // Log all message-chunk events for debugging
       if (progressType === "message-chunk" && chunk) {
         processChunk(taskId, chunk);
       } else {

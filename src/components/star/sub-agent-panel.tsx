@@ -3,11 +3,16 @@
  *
  * Tab-based panel for displaying sub-agent messages.
  * Each sub-agent has its own tab with message history.
+ *
+ * Performance optimizations:
+ * - React.memo to prevent unnecessary re-renders
+ * - Removed AnimatePresence/motion for streaming content (causes jank)
+ * - useMemo for expensive computations
  */
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import type { UIMessage, LanguageModelUsage } from "ai";
 import type { SubAgentCard } from "@/types/agent";
 import { Badge } from "@/components/ui/badge";
@@ -19,11 +24,9 @@ import {
   Loader2Icon,
   XCircleIcon,
   BotIcon,
-  XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MessageRenderer, MessageLoadingIndicator } from "./message-renderer";
-import { motion, AnimatePresence } from "motion/react";
 
 /**
  * SubAgentPanel props
@@ -38,15 +41,15 @@ export interface SubAgentPanelProps {
 }
 
 /**
- * Status icon component
+ * Status icon component - memoized
  */
-function StatusIcon({
+const StatusIcon = memo(({
   status,
   className,
 }: {
   status: SubAgentCard["status"];
   className?: string;
-}) {
+}) => {
   switch (status) {
     case "pending":
       return (
@@ -73,23 +76,23 @@ function StatusIcon({
     default:
       return null;
   }
-}
+});
 
 // Type assertion for message compatibility with MessageRenderer
 type MessageForRenderer = UIMessage & { metadata?: { totalUsage?: LanguageModelUsage } };
 
 /**
- * Sub-Agent Tab component
+ * Sub-Agent Tab component - memoized
  */
-function SubAgentTab({
+const SubAgentTab = memo(({
   agent,
   messages,
-  isActive,
 }: {
   agent: SubAgentCard;
   messages: UIMessage[];
-  isActive: boolean;
-}) {
+}) => {
+  const isStreaming = agent.status === "running";
+
   return (
     <div className="flex flex-col h-full">
       {/* Tab header info */}
@@ -110,7 +113,7 @@ function SubAgentTab({
         <div className="p-3 space-y-4">
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">
-              {agent.status === "running" ? (
+              {isStreaming ? (
                 <div className="flex items-center gap-2">
                   <Loader2Icon className="size-4 animate-spin" />
                   <span>处理中...</span>
@@ -120,33 +123,27 @@ function SubAgentTab({
               )}
             </div>
           ) : (
-            <AnimatePresence initial={false}>
+            <>
               {messages.map((message, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <MessageRenderer
-                    message={message as MessageForRenderer}
-                    isStreaming={agent.status === "running" && index === messages.length - 1}
-                    isLastMessage={index === messages.length - 1}
-                  />
-                </motion.div>
+                <MessageRenderer
+                  key={message.id}
+                  message={message as MessageForRenderer}
+                  isStreaming={isStreaming && index === messages.length - 1}
+                  isLastMessage={index === messages.length - 1}
+                />
               ))}
-            </AnimatePresence>
+            </>
           )}
 
           {/* Show loading indicator when streaming and no messages yet */}
-          {agent.status === "running" && messages.length === 0 && (
+          {isStreaming && messages.length === 0 && (
             <MessageLoadingIndicator />
           )}
         </div>
       </ScrollArea>
     </div>
   );
-}
+});
 
 /**
  * Sub-Agent Panel component
@@ -161,7 +158,8 @@ export function SubAgentPanel({
 }: SubAgentPanelProps) {
   const [activeTab, setActiveTab] = useState<string | null>(null);
 
-  const agentsList = [...agents.values()];
+  // Memoize agentsList to prevent unnecessary re-renders
+  const agentsList = useMemo(() => [...agents.values()], [agents]);
 
   // Don't render if no agents
   if (agentsList.length === 0) {
@@ -217,7 +215,7 @@ export function SubAgentPanel({
           </TabsList>
         </div>
 
-        {/* Tab content */}
+        {/* Tab content - only render active tab */}
         {agentsList.map((agent) => (
           <TabsContent
             key={agent.taskId}
@@ -228,7 +226,6 @@ export function SubAgentPanel({
               <SubAgentTab
                 agent={agent}
                 messages={messages.get(agent.taskId) || []}
-                isActive={currentActiveTab === agent.taskId}
               />
             )}
           </TabsContent>
