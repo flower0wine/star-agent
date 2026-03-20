@@ -123,7 +123,7 @@ function SubAgentTab({
             <AnimatePresence initial={false}>
               {messages.map((message, index) => (
                 <motion.div
-                  key={message.id}
+                  key={index}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}

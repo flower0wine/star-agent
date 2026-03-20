@@ -46,14 +46,17 @@ export async function createMultiStreamResponse(
 
       // Subscribe to sub-agent progress
       const progressHandler = (progress: SubAgentProgress) => {
-        console.log(`[MultiStream/${requestId}] Sub-agent progress:`, progress.type, progress.taskId);
-
         if (progress.type === "start") {
           state.subAgentTaskIds.add(progress.taskId);
         }
 
         // Forward message-chunk directly to the client
         if (progress.type === "message-chunk" && progress.chunk) {
+          console.log(`[MultiStream/${requestId}] Writing data-subagent chunk:`, {
+            taskId: progress.taskId,
+            progressType: progress.type,
+            chunkType: (progress.chunk as Record<string, unknown>)?.type,
+          });
           writer.write({
             type: "data-subagent",
             data: {
@@ -62,7 +65,6 @@ export async function createMultiStreamResponse(
               chunk: progress.chunk,
               progress: progress.progress,
             },
-            transient: true, // Don't add to message history
           });
           return;
         }
@@ -77,7 +79,6 @@ export async function createMultiStreamResponse(
             error: progress.error,
             result: progress.result,
           },
-          transient: true, // Don't add to message history
         });
       };
 

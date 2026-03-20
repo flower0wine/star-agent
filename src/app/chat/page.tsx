@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import type { GitHubRepo } from "@/lib/github/api";
@@ -83,8 +83,6 @@ export default function ChatPage() {
         return;
 
       const { progressType, chunk, error, result, progress } = subData;
-
-      console.log("[ChatPage] Sub-agent progress:", taskId, progressType);
 
       // Handle message-chunk type for streaming messages
       if (progressType === "message-chunk" && chunk) {
@@ -210,23 +208,42 @@ export default function ChatPage() {
     resetSubAgentMessages();
   }, [resetSubAgentMessages]);
 
-  // Handle chat submit
+  // Handle chat submit - use ref to avoid dependency on input state
+  const inputValueRef = useRef(input);
+  inputValueRef.current = input;
+
   const handleChatSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!input.trim() || isChatLoading)
+      const text = inputValueRef.current;
+      if (!text.trim() || isChatLoading)
         return;
 
-      await sendMessage({ text: input });
       setInput("");
+      await sendMessage({ text });
     },
-    [input, isChatLoading, sendMessage]
+    [isChatLoading, sendMessage]
   );
 
   // Handle stop generation
   const handleStop = useCallback(() => {
     stop();
   }, [stop]);
+
+  // Optimized input handlers
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+  }, []);
+
+  const handleTextareaKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleChatSubmit(e as unknown as React.FormEvent);
+      }
+    },
+    [handleChatSubmit]
+  );
 
   // Show agent selector if no agent-specific requirements
   // For now, we show the chat interface based on agent selection
@@ -340,7 +357,7 @@ export default function ChatPage() {
               <form onSubmit={handleChatSubmit} className="relative">
                 <Textarea
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   placeholder={
                     selectedAgent === "star"
                       ? "Ask me about your repositories..."
@@ -348,12 +365,7 @@ export default function ChatPage() {
                   }
                   className="min-h-[52px] w-full resize-none rounded-xl border bg-background py-3 pl-4 pr-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   rows={1}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleChatSubmit(e);
-                    }
-                  }}
+                  onKeyDown={handleTextareaKeyDown}
                 />
                 <Button
                   type={isChatLoading ? "button" : "submit"}

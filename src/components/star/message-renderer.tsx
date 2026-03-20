@@ -241,8 +241,6 @@ export function MessageRenderer({
         const output = part.output as Record<string, unknown> | undefined;
         const duration = output?.__duration as number | undefined;
 
-        console.log(`[MessageRenderer] Tool ${part.type} duration:`, duration);
-
         return (
           <Tool key={`tool-${i}`}>
             <ToolHeader type={part.type} state={part.state} duration={duration} />
@@ -276,8 +274,6 @@ export function MessageRenderer({
       {/* Token usage display */}
       {message.role === "assistant" && !isStreaming && message.metadata?.totalUsage && (
         <>
-          { }
-          {console.log("[MessageRenderer] Token usage received:", message.metadata.totalUsage)}
           <div className="mt-2 flex items-center gap-3 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
             <ZapIcon className="size-3.5" />
             <span>Tokens:</span>

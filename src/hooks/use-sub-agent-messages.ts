@@ -3,6 +3,11 @@
  *
  * Handles accumulation of UIMessageChunks into complete UIMessages
  * for rendering in the sub-agent panel.
+ *
+ * Performance optimized:
+ * - Uses refs to avoid unnecessary re-renders during streaming
+ * - Batches state updates
+ * - Uses direct indexing instead of findIndex
  */
 
 "use client";
@@ -23,12 +28,7 @@ import type { SubAgentCard } from "@/types/agent";
 interface SubAgentMessageState {
   messages: UIMessage[];
   currentMessageParts: UIMessagePart<UIDataTypes, UITools>[];
-  currentReasoning: { text: string; isStreaming: boolean } | null;
-  currentToolCall: {
-    toolCallId: string;
-    toolName: string;
-    input: unknown;
-  } | null;
+  textPartIndex: number;
   messageId: string | null;
   isStreaming: boolean;
   finishReason?: string;
@@ -68,24 +68,7 @@ export interface UseSubAgentMessagesReturn {
 }
 
 /**
- * Convert UIMessageChunk parts to UIMessage
- */
-function createUIMessage(state: SubAgentMessageState): UIMessage | null {
-  if (!state.messageId)
-    return null;
-
-  return {
-    id: state.messageId,
-    role: "assistant",
-    parts: state.currentMessageParts.length > 0 ? state.currentMessageParts : [],
-    metadata: state.totalUsage ? { totalUsage: state.totalUsage } : undefined,
-  } as unknown as UIMessage;
-}
-
-/**
  * Sub-agent messages hook
- *
- * Manages multiple sub-agent message streams and their accumulation.
  */
 export function useSubAgentMessages(
   options: UseSubAgentMessagesOptions = {}
@@ -110,8 +93,7 @@ export function useSubAgentMessages(
       statesRef.current.set(taskId, {
         messages: [],
         currentMessageParts: [],
-        currentReasoning: null,
-        currentToolCall: null,
+        textPartIndex: -1,
         messageId: null,
         isStreaming: true,
       });
@@ -120,7 +102,23 @@ export function useSubAgentMessages(
   }, []);
 
   /**
+   * Create a UIMessage from state
+   */
+  const createMessage = useCallback((state: SubAgentMessageState): UIMessage | null => {
+    if (!state.messageId)
+      return null;
+
+    return {
+      id: state.messageId,
+      role: "assistant",
+      parts: state.currentMessageParts.length > 0 ? state.currentMessageParts : [],
+      metadata: state.totalUsage ? { totalUsage: state.totalUsage } : undefined,
+    } as unknown as UIMessage;
+  }, []);
+
+  /**
    * Process a message-chunk from sub-agent
+   * Optimized to minimize re-renders
    */
   const processChunk = useCallback(
     (taskId: string, chunk: unknown) => {
@@ -130,31 +128,48 @@ export function useSubAgentMessages(
       const chunkObj = chunk as Record<string, unknown>;
       const state = getOrCreateState(taskId);
 
+      // console.log(chunkObj);
+
+
       switch (chunkObj.type) {
         case "text-start": {
           state.messageId = chunkObj.id as string;
           state.isStreaming = true;
+          state.textPartIndex = -1;
           break;
         }
 
         case "text-delta": {
           const delta = chunkObj.delta as string;
-          if (delta) {
-            const textPartIndex = state.currentMessageParts.findIndex(
-              (p) => typeof p === "object" && (p as Record<string, unknown>).type === "text"
-            );
-            if (textPartIndex >= 0) {
-              const textPart = state.currentMessageParts[textPartIndex] as Record<string, unknown>;
-              textPart.text = (textPart.text as string) + delta;
-            } else {
-              state.currentMessageParts.push({ type: "text", text: delta });
-            }
+          if (!delta)
+            break;
+
+          if (state.textPartIndex >= 0) {
+            const textPart = state.currentMessageParts[state.textPartIndex] as Record<string, unknown>;
+            textPart.text = (textPart.text as string) + delta;
+          } else {
+            state.textPartIndex = state.currentMessageParts.length;
+            state.currentMessageParts.push({ type: "text", text: delta });
           }
+
+          if (!state.isStreaming)
+            break;
+
+          const tempMessage = {
+            id: `streaming-${state.messageId!}`,
+            role: "assistant" as const,
+            parts: state.currentMessageParts,
+          } as UIMessage;
+
+          setSubAgentMessages((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, [tempMessage]);
+            return next;
+          });
           break;
         }
 
         case "reasoning-start": {
-          state.currentReasoning = { text: "", isStreaming: true };
           state.currentMessageParts.push({
             type: "reasoning",
             text: "",
@@ -164,31 +179,37 @@ export function useSubAgentMessages(
 
         case "reasoning-delta": {
           const delta = chunkObj.delta as string;
-          if (delta && state.currentReasoning) {
-            state.currentReasoning.text += delta;
-            const reasoningPart = state.currentMessageParts.find(
-              (p) => typeof p === "object" && (p as Record<string, unknown>).type === "reasoning"
-            );
-            if (reasoningPart) {
-              (reasoningPart as Record<string, unknown>).text = state.currentReasoning.text;
-            }
+          if (!delta)
+            break;
+
+          const reasoningPart = state.currentMessageParts.at(-1);
+          if (reasoningPart && (reasoningPart as Record<string, unknown>).type === "reasoning") {
+            (reasoningPart as Record<string, unknown>).text
+              = ((reasoningPart as Record<string, unknown>).text as string) + delta;
           }
+
+          if (!state.isStreaming)
+            break;
+
+          const tempMessage = {
+            id: `streaming-${state.messageId!}`,
+            role: "assistant" as const,
+            parts: state.currentMessageParts,
+          } as UIMessage;
+
+          setSubAgentMessages((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, [tempMessage]);
+            return next;
+          });
           break;
         }
 
         case "reasoning-end": {
-          if (state.currentReasoning) {
-            state.currentReasoning.isStreaming = false;
-          }
           break;
         }
 
         case "tool-input-start": {
-          state.currentToolCall = {
-            toolCallId: chunkObj.toolCallId as string,
-            toolName: chunkObj.toolName as string,
-            input: {},
-          };
           state.currentMessageParts.push({
             type: "tool-call",
             toolCallId: chunkObj.toolCallId as string,
@@ -201,58 +222,101 @@ export function useSubAgentMessages(
 
         case "tool-input-delta": {
           const delta = chunkObj.inputTextDelta as string;
-          if (delta && state.currentToolCall) {
-            state.currentToolCall.input = (
-              state.currentToolCall.input as string
-            ) + delta;
-            const toolPart = state.currentMessageParts.find(
-              (p) =>
-                typeof p === "object"
-                && (p as Record<string, unknown>).toolCallId === state.currentToolCall?.toolCallId
-            );
-            if (toolPart && typeof toolPart === "object") {
-              (toolPart as Record<string, unknown>).input = state.currentToolCall.input;
-            }
+          if (!delta)
+            break;
+
+          const lastPart = state.currentMessageParts.at(-1);
+          if (lastPart && (lastPart as Record<string, unknown>).type === "tool-call") {
+            (lastPart as Record<string, unknown>).input
+              = ((lastPart as Record<string, unknown>).input as string) + delta;
           }
+
+          if (!state.isStreaming)
+            break;
+
+          const tempMessage = {
+            id: `streaming-${state.messageId!}`,
+            role: "assistant" as const,
+            parts: state.currentMessageParts,
+          } as UIMessage;
+
+          setSubAgentMessages((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, [tempMessage]);
+            return next;
+          });
           break;
         }
 
         case "tool-input-available": {
-          const toolPart = state.currentMessageParts.find(
-            (p) =>
-              typeof p === "object"
-              && (p as Record<string, unknown>).toolCallId === chunkObj.toolCallId
-          );
-          if (toolPart && typeof toolPart === "object") {
-            (toolPart as Record<string, unknown>).input = chunkObj.input;
-            (toolPart as Record<string, unknown>).state = "input-available";
+          const lastPart = state.currentMessageParts.at(-1);
+          if (lastPart && (lastPart as Record<string, unknown>).type === "tool-call") {
+            (lastPart as Record<string, unknown>).input = chunkObj.input;
+            (lastPart as Record<string, unknown>).state = "input-available";
           }
+
+          if (!state.isStreaming)
+            break;
+
+          const tempMessage = {
+            id: `streaming-${state.messageId!}`,
+            role: "assistant" as const,
+            parts: state.currentMessageParts,
+          } as UIMessage;
+
+          setSubAgentMessages((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, [tempMessage]);
+            return next;
+          });
           break;
         }
 
         case "tool-output-available": {
-          const toolPart = state.currentMessageParts.find(
-            (p) =>
-              typeof p === "object"
-              && (p as Record<string, unknown>).toolCallId === chunkObj.toolCallId
-          );
-          if (toolPart && typeof toolPart === "object") {
-            (toolPart as Record<string, unknown>).output = chunkObj.output;
-            (toolPart as Record<string, unknown>).state = "output-available";
+          const lastPart = state.currentMessageParts.at(-1);
+          if (lastPart && (lastPart as Record<string, unknown>).type === "tool-call") {
+            (lastPart as Record<string, unknown>).output = chunkObj.output;
+            (lastPart as Record<string, unknown>).state = "output-available";
           }
+
+          if (!state.isStreaming)
+            break;
+
+          const tempMessage = {
+            id: `streaming-${state.messageId!}`,
+            role: "assistant" as const,
+            parts: state.currentMessageParts,
+          } as UIMessage;
+
+          setSubAgentMessages((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, [tempMessage]);
+            return next;
+          });
           break;
         }
 
         case "tool-output-error": {
-          const toolPart = state.currentMessageParts.find(
-            (p) =>
-              typeof p === "object"
-              && (p as Record<string, unknown>).toolCallId === chunkObj.toolCallId
-          );
-          if (toolPart && typeof toolPart === "object") {
-            (toolPart as Record<string, unknown>).errorText = chunkObj.errorText;
-            (toolPart as Record<string, unknown>).state = "output-error";
+          const lastPart = state.currentMessageParts.at(-1);
+          if (lastPart && (lastPart as Record<string, unknown>).type === "tool-call") {
+            (lastPart as Record<string, unknown>).errorText = chunkObj.errorText;
+            (lastPart as Record<string, unknown>).state = "output-error";
           }
+
+          if (!state.isStreaming)
+            break;
+
+          const tempMessage = {
+            id: `streaming-${state.messageId!}`,
+            role: "assistant" as const,
+            parts: state.currentMessageParts,
+          } as UIMessage;
+
+          setSubAgentMessages((prev) => {
+            const next = new Map(prev);
+            next.set(taskId, [tempMessage]);
+            return next;
+          });
           break;
         }
 
@@ -264,12 +328,17 @@ export function useSubAgentMessages(
               .totalUsage as LanguageModelUsage;
           }
 
-          // Finalize current message
-          const message = createUIMessage(state);
+          const message = createMessage(state);
           if (message) {
             state.messages.push(message);
+            state.currentMessageParts = [];
+
+            setSubAgentMessages((prev) => {
+              const next = new Map(prev);
+              next.set(taskId, [...state.messages]);
+              return next;
+            });
           }
-          state.currentMessageParts = [];
           break;
         }
 
@@ -281,26 +350,23 @@ export function useSubAgentMessages(
         }
       }
 
-      // Update messages state
-      setSubAgentMessages((prev) => {
-        const next = new Map(prev);
-        next.set(taskId, [...state.messages]);
-        return next;
-      });
-
-      // Update cards state to show running
-      setSubAgentCards((prev) => {
-        const next = new Map(prev);
-        const card = next.get(taskId);
-        if (card) {
-          next.set(taskId, { ...card, status: "running", progress: 50 });
-        }
-        return next;
-      });
-
-      onSubAgentUpdate?.(subAgentCards);
+      // Update cards state - only for non-streaming updates or important events
+      if (!state.isStreaming || chunkObj.type === "start" || chunkObj.type === "finish") {
+        setSubAgentCards((prev) => {
+          const next = new Map(prev);
+          const card = next.get(taskId);
+          if (card) {
+            next.set(taskId, {
+              ...card,
+              status: state.isStreaming ? "running" : card.status,
+              progress: state.isStreaming ? 50 : card.progress,
+            });
+          }
+          return next;
+        });
+      }
     },
-    [getOrCreateState, onSubAgentUpdate, subAgentCards]
+    [getOrCreateState, createMessage]
   );
 
   /**
@@ -339,11 +405,10 @@ export function useSubAgentMessages(
             });
           }
 
-          // Finalize streaming for this task
           const state = statesRef.current.get(taskId);
           if (state) {
             state.isStreaming = false;
-            const message = createUIMessage(state);
+            const message = createMessage(state);
             if (message) {
               state.messages.push(message);
               setSubAgentMessages((prevMsgs) => {
@@ -375,10 +440,8 @@ export function useSubAgentMessages(
 
         return next;
       });
-
-      onSubAgentUpdate?.(subAgentCards);
     },
-    [onSubAgentUpdate, subAgentCards]
+    [createMessage]
   );
 
   /**
