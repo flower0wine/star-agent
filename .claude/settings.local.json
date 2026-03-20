@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "mcp__context7__query-docs",
+      "mcp__context7__resolve-library-id",
+      "Bash(bunx shadcn@latest:*)",
+      "Read(//c/me/**)",
+      "Bash(sed -n '270,280p' src/components/star/sub-agent-panel.tsx)"
     ]
   }
 }

@@ -1,32 +1,29 @@
 /**
  * Sub-Agent Panel
  *
- * Collapsible panel for displaying sub-agent status cards.
- * Shows running sub-agents in real-time.
+ * Tab-based panel for displaying sub-agent messages.
+ * Each sub-agent has its own tab with message history.
  */
 
 "use client";
 
 import { useState } from "react";
+import type { UIMessage, LanguageModelUsage } from "ai";
 import type { SubAgentCard } from "@/types/agent";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
   CheckCircleIcon,
   CircleIcon,
   Loader2Icon,
   XCircleIcon,
-  TerminalIcon,
+  BotIcon,
+  XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MessageRenderer, MessageLoadingIndicator } from "./message-renderer";
+import { motion, AnimatePresence } from "motion/react";
 
 /**
  * SubAgentPanel props
@@ -34,10 +31,8 @@ import { cn } from "@/lib/utils";
 export interface SubAgentPanelProps {
   /** Sub-agent cards to display */
   agents: Map<string, SubAgentCard>;
-  /** Callback when a card is expanded */
-  onExpand?: (taskId: string) => void;
-  /** Callback when a card is collapsed */
-  onCollapse?: (taskId: string) => void;
+  /** Sub-agent messages to display */
+  messages: Map<string, UIMessage[]>;
   /** Custom className */
   className?: string;
 }
@@ -54,134 +49,101 @@ function StatusIcon({
 }) {
   switch (status) {
     case "pending":
-      return <CircleIcon className={cn("size-4 text-muted-foreground", className)} />;
+      return (
+        <CircleIcon
+          className={cn("size-3.5 text-muted-foreground", className)}
+        />
+      );
     case "running":
       return (
         <Loader2Icon
-          className={cn("size-4 text-blue-500 animate-spin", className)}
+          className={cn("size-3.5 text-blue-500 animate-spin", className)}
         />
       );
     case "completed":
       return (
-        <CheckCircleIcon className={cn("size-4 text-green-500", className)} />
+        <CheckCircleIcon
+          className={cn("size-3.5 text-green-500", className)}
+        />
       );
     case "failed":
-      return <XCircleIcon className={cn("size-4 text-destructive", className)} />;
+      return (
+        <XCircleIcon className={cn("size-3.5 text-destructive", className)} />
+      );
     default:
       return null;
   }
 }
 
-/**
- * Status badge component
- */
-function StatusBadge({ status }: { status: SubAgentCard["status"] }) {
-  const variants: Record<SubAgentCard["status"], "secondary" | "default" | "destructive" | "outline"> = {
-    pending: "secondary",
-    running: "default",
-    completed: "secondary",
-    failed: "destructive",
-  };
-
-  const labels: Record<SubAgentCard["status"], string> = {
-    pending: "等待中",
-    running: "运行中",
-    completed: "已完成",
-    failed: "失败",
-  };
-
-  return (
-    <Badge variant={variants[status]} className="text-xs">
-      {labels[status]}
-    </Badge>
-  );
-}
+// Type assertion for message compatibility with MessageRenderer
+type MessageForRenderer = UIMessage & { metadata?: { totalUsage?: LanguageModelUsage } };
 
 /**
- * Agent card component
+ * Sub-Agent Tab component
  */
-function AgentCard({
+function SubAgentTab({
   agent,
-  isExpanded,
-  onToggle,
+  messages,
+  isActive,
 }: {
   agent: SubAgentCard;
-  isExpanded: boolean;
-  onToggle: () => void;
+  messages: UIMessage[];
+  isActive: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "border rounded-lg transition-colors hover:bg-muted/30 cursor-pointer",
-        "bg-card"
-      )}
-      onClick={onToggle}
-    >
-      {/* Card header */}
-      <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className="flex flex-col h-full">
+      {/* Tab header info */}
+      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <StatusIcon status={agent.status} />
-          <span className="text-sm font-medium truncate">
-            {agent.taskId.slice(0, 16)}...
+          <span className="text-xs font-medium truncate flex-1">
+            {agent.task || agent.taskId.slice(0, 12)}...
           </span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="outline" className="text-xs">
-            {agent.reposCount} repos
-          </Badge>
-          <StatusBadge status={agent.status} />
-        </div>
+        <Badge variant="outline" className="text-xs ml-2 shrink-0">
+          {agent.reposCount} repos
+        </Badge>
       </div>
 
-      {/* Task description */}
-      {agent.task && (
-        <div className="px-3 pb-2">
-          <p className="text-xs text-muted-foreground line-clamp-2">
-            {agent.task}
-          </p>
-        </div>
-      )}
-
-      {/* Progress bar (only when running) */}
-      {agent.status === "running" && (
-        <div className="px-3 pb-2">
-          <Progress value={agent.progress} className="h-1" />
-        </div>
-      )}
-
-      {/* Expanded content */}
-      {isExpanded && (
-        <CollapsibleContent>
-          <div className="px-3 pb-3 space-y-2">
-            {/* Current output */}
-            {agent.currentOutput && (
-              <div className="rounded-md bg-muted p-2">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                  <TerminalIcon className="size-3" />
-                  <span>输出</span>
+      {/* Messages area */}
+      <ScrollArea className="flex-1">
+        <div className="p-3 space-y-4">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">
+              {agent.status === "running" ? (
+                <div className="flex items-center gap-2">
+                  <Loader2Icon className="size-4 animate-spin" />
+                  <span>处理中...</span>
                 </div>
-                <pre className="text-xs font-mono whitespace-pre-wrap break-all max-h-32 overflow-auto">
-                  {agent.currentOutput}
-                </pre>
-              </div>
-            )}
+              ) : (
+                <span>暂无消息</span>
+              )}
+            </div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {messages.map((message, index) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <MessageRenderer
+                    message={message as MessageForRenderer}
+                    isStreaming={agent.status === "running" && index === messages.length - 1}
+                    isLastMessage={index === messages.length - 1}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
 
-            {/* Final result */}
-            {agent.finalResult && agent.status === "completed" && (
-              <div className="text-xs text-green-600 dark:text-green-400">
-                {agent.finalResult}
-              </div>
-            )}
-
-            {/* Error message */}
-            {agent.error && agent.status === "failed" && (
-              <div className="text-xs text-destructive">
-                错误: {agent.error}
-              </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      )}
+          {/* Show loading indicator when streaming and no messages yet */}
+          {agent.status === "running" && messages.length === 0 && (
+            <MessageLoadingIndicator />
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -189,17 +151,15 @@ function AgentCard({
 /**
  * Sub-Agent Panel component
  *
- * Collapsible panel showing all sub-agent cards.
- * Positioned as a sidebar on the right side of the chat.
+ * Tab-based panel showing sub-agent messages.
+ * Each sub-agent gets its own tab with MessageRenderer.
  */
 export function SubAgentPanel({
   agents,
-  onExpand,
-  onCollapse,
+  messages,
   className,
 }: SubAgentPanelProps) {
-  const [isOpen, setIsOpen] = useState(true);
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<string | null>(null);
 
   const agentsList = [...agents.values()];
 
@@ -208,52 +168,73 @@ export function SubAgentPanel({
     return null;
   }
 
-  const handleToggleCard = (taskId: string) => {
-    setExpandedCards((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-        onCollapse?.(taskId);
-      } else {
-        next.add(taskId);
-        onExpand?.(taskId);
-      }
-      return next;
-    });
-  };
+  // Auto-select first tab when agents change
+  const firstAgentId = agentsList[0]?.taskId;
+  const currentActiveTab = activeTab && agents.has(activeTab) ? activeTab : firstAgentId;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className={className}>
-      {/* Panel header */}
-      <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium bg-muted/50 hover:bg-muted/70 transition-colors rounded-t-lg">
+    <div className={cn("flex flex-col h-full", className)}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
         <div className="flex items-center gap-2">
-          {isOpen ? (
-            <ChevronDownIcon className="size-4" />
-          ) : (
-            <ChevronRightIcon className="size-4" />
-          )}
-          <span>子 Agent 进度</span>
+          <BotIcon className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">子 Agent</span>
         </div>
         <Badge variant="secondary" className="text-xs">
           {agentsList.length}
         </Badge>
-      </CollapsibleTrigger>
+      </div>
 
-      <CollapsibleContent>
-        <ScrollArea className="h-[300px]">
-          <div className="p-3 space-y-2">
+      {/* Tabs */}
+      <Tabs
+        value={currentActiveTab || undefined}
+        onValueChange={setActiveTab}
+        className="flex-1 flex flex-col min-h-0"
+      >
+        {/* Tab list */}
+        <div className="border-b bg-muted/20 px-2 pt-2">
+          <TabsList className="h-auto bg-transparent w-full justify-start overflow-x-auto">
             {agentsList.map((agent) => (
-              <AgentCard
+              <TabsTrigger
                 key={agent.taskId}
-                agent={agent}
-                isExpanded={expandedCards.has(agent.taskId)}
-                onToggle={() => handleToggleCard(agent.taskId)}
-              />
+                value={agent.taskId}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 text-xs",
+                  "data-[state=active]:bg-background data-[state=active]:shadow-sm",
+                  "border-b-2 border-transparent data-[state=active]:border-primary",
+                  "rounded-t-lg rounded-b-none"
+                )}
+              >
+                <StatusIcon status={agent.status} />
+                <span className="truncate max-w-[100px]">
+                  {agent.task?.slice(0, 8) || agent.taskId.slice(0, 8)}...
+                </span>
+                {agent.status === "running" && (
+                  <Loader2Icon className="size-3 animate-spin shrink-0" />
+                )}
+              </TabsTrigger>
             ))}
-          </div>
-        </ScrollArea>
-      </CollapsibleContent>
-    </Collapsible>
+          </TabsList>
+        </div>
+
+        {/* Tab content */}
+        {agentsList.map((agent) => (
+          <TabsContent
+            key={agent.taskId}
+            value={agent.taskId}
+            className="flex-1 min-h-0 m-0 mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+          >
+            {currentActiveTab === agent.taskId && (
+              <SubAgentTab
+                agent={agent}
+                messages={messages.get(agent.taskId) || []}
+                isActive={currentActiveTab === agent.taskId}
+              />
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
   );
 }
 

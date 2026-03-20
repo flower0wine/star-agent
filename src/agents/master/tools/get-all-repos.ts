@@ -50,7 +50,7 @@ export function createGetAllReposTool(repos: GitHubRepo[]) {
         message: `已获取全部 ${repos.length} 个仓库`,
         __duration: Date.now() - startTime,
       };
-      // eslint-disable-next-line no-console
+
       console.log(`[getAllReposTool] Executed in ${result.__duration}ms, repos: ${result.totalCount}`);
       return result;
     },

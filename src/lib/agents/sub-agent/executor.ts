@@ -153,82 +153,32 @@ export async function executeSubAgentTask(
         break;
       }
 
-      // Extract text from chunk and notify
+      // Forward the complete UIMessageChunk directly
       if (chunk && typeof chunk === "object") {
-        // Check for text content
-        const hasText = "text" in chunk || "content" in chunk;
+        const chunkObj = chunk as Record<string, unknown>;
 
-        if (hasText) {
-          const content
-            = "text" in chunk
-              ? (chunk.text as string)
-              : "content" in chunk
-                ? (chunk.content as string)
-                : "";
-
-          if (content) {
-            onProgress({
-              taskId: task.id,
-              type: "text",
-              content,
-              progress: currentProgress,
-            });
-          }
-        }
-
-        // Check for tool call
-        if ("tool" in chunk || "toolCall" in chunk) {
-          const toolCall
-            = "tool" in chunk
-              ? chunk.tool
-              : "toolCall" in chunk
-                ? chunk.toolCall
-                : undefined;
-
-          if (toolCall) {
-            onProgress({
-              taskId: task.id,
-              type: "tool-call",
-              toolCall: toolCall as Record<string, unknown>,
-              progress: currentProgress,
-            });
-          }
-        }
-
-        // Check for tool result
-        if ("result" in chunk || "toolResult" in chunk) {
-          const toolResult
-            = "result" in chunk
-              ? chunk.result
-              : "toolResult" in chunk
-                ? chunk.toolResult
-                : undefined;
-
-          if (toolResult) {
-            onProgress({
-              taskId: task.id,
-              type: "tool-result",
-              toolResult: toolResult as Record<string, unknown>,
-              progress: currentProgress,
-            });
-          }
-        }
-
-        // Check for finish
-        if ("finish" in chunk || chunk.type === "finish") {
-          currentProgress = 100;
-          task.result = "处理完成";
-        }
-      }
-
-      // Update progress based on processing
-      if (currentProgress < 90) {
-        currentProgress = Math.min(currentProgress + 10, 90);
+        // Send the complete chunk as message-chunk
         onProgress({
           taskId: task.id,
-          type: "progress",
-          progress: currentProgress,
+          type: "message-chunk",
+          chunk: chunkObj,
         });
+
+        // Track progress for progress indicator
+        if ("type" in chunkObj) {
+          const chunkType = chunkObj.type as string;
+          if (chunkType === "finish") {
+            currentProgress = 100;
+            task.result = "处理完成";
+          } else if (chunkType === "text-delta" && currentProgress < 90) {
+            currentProgress = Math.min(currentProgress + 5, 90);
+            onProgress({
+              taskId: task.id,
+              type: "progress",
+              progress: currentProgress,
+            });
+          }
+        }
       }
     }
 

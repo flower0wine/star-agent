@@ -7,8 +7,9 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAgentChat } from "@/hooks/use-agent-chat";
+import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import type { GitHubRepo } from "@/lib/github/api";
 import type { ChatOnDataCallback, UIMessage } from "ai";
 import {
@@ -47,10 +48,14 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
-  // Sub-agent cards state (for Master Agent)
-  const [subAgentCards, setSubAgentCards] = useState<Map<string, SubAgentCard>>(
-    new Map()
-  );
+  // Sub-agent messages state (for Master Agent)
+  const {
+    subAgentMessages,
+    subAgentCards,
+    processChunk,
+    handleProgress,
+    reset: resetSubAgentMessages,
+  } = useSubAgentMessages();
 
   // Chat state
   const [input, setInput] = useState("");
@@ -59,7 +64,7 @@ export default function ChatPage() {
   interface SubAgentProgressData {
     taskId: string;
     progressType?: string;
-    content?: string;
+    chunk?: unknown;
     error?: string;
     result?: string;
     progress?: number;
@@ -77,57 +82,19 @@ export default function ChatPage() {
       if (!taskId)
         return;
 
-      const { progressType, content, error, result, progress } = subData;
+      const { progressType, chunk, error, result, progress } = subData;
 
       console.log("[ChatPage] Sub-agent progress:", taskId, progressType);
 
-      setSubAgentCards((prev) => {
-        const current = prev.get(taskId);
-
-        // Create or update card
-        const card: SubAgentCard = current
-          ? {
-              ...current,
-              status:
-                progressType === "complete"
-                  ? "completed"
-                  : progressType === "error"
-                    ? "failed"
-                    : progressType === "start"
-                      || progressType === "progress"
-                      || progressType === "text"
-                      ? "running"
-                      : current.status,
-              progress: progress ?? current.progress,
-              currentOutput: content
-                ? (current.currentOutput || "") + content
-                : current.currentOutput,
-              finalResult: result ?? current.finalResult,
-              error: error ?? current.error,
-            }
-          : {
-              taskId,
-              status:
-                progressType === "complete"
-                  ? "completed"
-                  : progressType === "error"
-                    ? "failed"
-                    : "pending",
-              task: "",
-              reposCount: 0,
-              progress: progress ?? 0,
-              currentOutput: content,
-              finalResult: result,
-              error,
-            };
-
-        const next = new Map(prev);
-        next.set(taskId, card);
-
-        return next;
-      });
+      // Handle message-chunk type for streaming messages
+      if (progressType === "message-chunk" && chunk) {
+        processChunk(taskId, chunk);
+      } else {
+        // Handle other progress types (start, progress, complete, error)
+        handleProgress(taskId, progressType || "progress", progress, result, error);
+      }
     },
-    []
+    [processChunk, handleProgress]
   );
 
   const { messages, sendMessage, status, error: chatError, regenerate, stop }
@@ -161,7 +128,7 @@ export default function ChatPage() {
   // Extract sub-agent task IDs from messages (for Master Agent)
   useEffect(() => {
     if (selectedAgent !== "master") {
-      setSubAgentCards(new Map());
+      resetSubAgentMessages();
       return;
     }
 
@@ -192,28 +159,13 @@ export default function ChatPage() {
             && typeof result.taskId === "string"
             && result.taskId.startsWith("subagent-")
           ) {
-            // Add card if not exists
-            setSubAgentCards((prev) => {
-              if (prev.has(result.taskId as string))
-                return prev;
-
-              const next = new Map(prev);
-              next.set(result.taskId as string, {
-                taskId: result.taskId as string,
-                status: "running",
-                task: (result.message as string) || "处理中...",
-                reposCount: (result.reposCount as number) || 0,
-                progress: 0,
-                currentOutput: "",
-              });
-
-              return next;
-            });
+            // Add card if not exists - use handleProgress for proper initialization
+            handleProgress(result.taskId, "start", 0);
           }
         }
       });
     });
-  }, [messages, selectedAgent]);
+  }, [messages, selectedAgent, handleProgress, resetSubAgentMessages]);
 
   const isChatLoading = status === "submitted" || status === "streaming";
   const isLastMessage = messages.length > 0;
@@ -255,8 +207,8 @@ export default function ChatPage() {
     setRepos([]);
     setIsVerified(false);
     setInput("");
-    setSubAgentCards(new Map());
-  }, []);
+    resetSubAgentMessages();
+  }, [resetSubAgentMessages]);
 
   // Handle chat submit
   const handleChatSubmit = useCallback(
@@ -450,15 +402,10 @@ export default function ChatPage() {
 
         {/* Sub-Agent Panel (only for Master Agent) */}
         {selectedAgent === "master" && (
-          <div className="w-80 border-l bg-background shrink-0">
+          <div className="w-96 border-l bg-background shrink-0">
             <SubAgentPanel
               agents={subAgentCards}
-              onExpand={(taskId) => {
-                console.log("Expand agent:", taskId);
-              }}
-              onCollapse={(taskId) => {
-                console.log("Collapse agent:", taskId);
-              }}
+              messages={subAgentMessages}
             />
           </div>
         )}

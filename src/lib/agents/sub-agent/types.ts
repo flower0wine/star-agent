@@ -50,11 +50,9 @@ export interface SubAgentTask {
 export type SubAgentProgressType
   = | "start"
     | "progress"
-    | "text"
-    | "tool-call"
-    | "tool-result"
     | "complete"
-    | "error";
+    | "error"
+    | "message-chunk";
 
 /**
  * Sub-agent progress event
@@ -65,12 +63,8 @@ export interface SubAgentProgress {
   taskId: string;
   /** Progress type */
   type: SubAgentProgressType;
-  /** Text content */
-  content?: string;
-  /** Tool call data */
-  toolCall?: Record<string, unknown>;
-  /** Tool result data */
-  toolResult?: Record<string, unknown>;
+  /** UIMessageChunk for message-chunk events */
+  chunk?: unknown;
   /** Progress percentage */
   progress?: number;
   /** Error message */

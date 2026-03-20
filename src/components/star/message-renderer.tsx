@@ -87,7 +87,7 @@ interface RepoToolOutput {
 }
 
 // Custom message type with usage metadata
-interface ChatMessageWithUsage extends UIMessage<{ totalUsage: LanguageModelUsage }> {}
+type ChatMessageWithUsage = UIMessage<{ totalUsage?: LanguageModelUsage }>;
 
 export interface MessageRendererProps {
   message: ChatMessageWithUsage;
@@ -240,7 +240,7 @@ export function MessageRenderer({
         // Extract duration from output if available
         const output = part.output as Record<string, unknown> | undefined;
         const duration = output?.__duration as number | undefined;
-        // eslint-disable-next-line no-console
+
         console.log(`[MessageRenderer] Tool ${part.type} duration:`, duration);
 
         return (
@@ -276,7 +276,7 @@ export function MessageRenderer({
       {/* Token usage display */}
       {message.role === "assistant" && !isStreaming && message.metadata?.totalUsage && (
         <>
-          {/* eslint-disable-next-line no-console */}
+          { }
           {console.log("[MessageRenderer] Token usage received:", message.metadata.totalUsage)}
           <div className="mt-2 flex items-center gap-3 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
             <ZapIcon className="size-3.5" />

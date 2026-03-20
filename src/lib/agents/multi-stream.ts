@@ -52,14 +52,28 @@ export async function createMultiStreamResponse(
           state.subAgentTaskIds.add(progress.taskId);
         }
 
-        // Write sub-agent progress as data part
+        // Forward message-chunk directly to the client
+        if (progress.type === "message-chunk" && progress.chunk) {
+          writer.write({
+            type: "data-subagent",
+            data: {
+              taskId: progress.taskId,
+              progressType: progress.type,
+              chunk: progress.chunk,
+              progress: progress.progress,
+            },
+            transient: true, // Don't add to message history
+          });
+          return;
+        }
+
+        // Write sub-agent progress as data part (for start, progress, complete, error)
         writer.write({
           type: "data-subagent",
           data: {
             taskId: progress.taskId,
             progressType: progress.type,
             progress: progress.progress,
-            content: progress.content,
             error: progress.error,
             result: progress.result,
           },
@@ -112,7 +126,7 @@ export async function createMultiStreamResponse(
         console.log(`[MultiStream/${requestId}] Unsubscribed progress handler`);
       }
     },
-    onFinish: ({}) => {
+    onFinish: () => {
       console.log(`[MultiStream/${requestId}] Stream finished`);
     },
   });
