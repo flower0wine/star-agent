@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(bun *)",
+      "Bash(pnpm *)",
+      "Bash(yarn *)",
+      "Bash(git status)",
+      "Bash(git diff)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git stash *)",
+      "Bash(sed -n *)",
+      "Bash(cls)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(node *)",
+      "Bash(npx *)",
+      "WebFetch",
+      "mcp__ddg-search__search",
+      "mcp__ddg-search__fetch_content",
+      "mcp__context7__resolve-library-id",
+      "Read(~/.**)",
+      "Read(./**)",
+      "Read(../**)"
+    ],
+    "deny": [
+      "Read(./.env*)",
+      "Read(./*.env*)",
+      "Read(./secrets/**)",
+      "Read(./credentials/**)",
+      "Read(~/.*)",
+      "Bash(git push *)",
+      "Bash(rm -rf *)",
+      "Bash(del *)",
+      "Bash(Format-Volume)",
+      "Bash(diskpart)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Edit(./.env*)",
+      "Edit(./.gitignore)"
+    ]
+  },
+  "permissionsAllowToolbar": true,
+  "permissionsDismissalMessage": "Approved"
+}
