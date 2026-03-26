@@ -32,7 +32,8 @@ export interface CreateSubAgentInput {
  */
 export function createCreateSubAgentTool(
   repos: GitHubRepo[],
-  username: string
+  username: string,
+  sessionId: string
 ) {
   return tool({
     description: "当需要处理的仓库数量大于 200 时，使用该工具创建子 Agent 来分配处理",
@@ -60,9 +61,6 @@ export function createCreateSubAgentTool(
 
       // Get SubAgentManager
       const manager = getSubAgentManager();
-
-      // Use a default session ID (in production, this should be passed from the API handler)
-      const sessionId = "master-agent-session";
 
       // Add task to queue - IMMEDIATELY returns
       const result = manager.addTask(

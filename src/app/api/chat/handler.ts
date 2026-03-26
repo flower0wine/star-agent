@@ -30,8 +30,6 @@ export async function handleStarAgent(
   const username = body.username || body.context?.username;
   const repos = body.repos || body.context?.repos;
 
-  console.log(`[${requestId}] Username: ${username}, Messages: ${body.messages?.length || 0}`);
-
   if (!username) {
     return NextResponse.json(
       { error: "GitHub username is required" },
@@ -44,12 +42,9 @@ export async function handleStarAgent(
   if (repos && Array.isArray(repos) && repos.length > 0) {
     // Use repos provided by client (already fetched)
     finalRepos = repos;
-    console.log(`[${requestId}] Using ${finalRepos.length} repos from client`);
   } else {
     // Fallback: fetch from API
-    console.log(`[${requestId}] Fetching repos for user: ${username}`);
     finalRepos = await getRepos(username);
-    console.log(`[${requestId}] Fetched ${finalRepos.length} repos from API`);
   }
 
   if (finalRepos.length === 0) {
@@ -80,9 +75,6 @@ export async function handleStarAgent(
 
   // Get model based on provider
   const { model, supportsReasoning } = getModel();
-  console.log(
-    `[${requestId}] Using model: ${supportsReasoning ? "with reasoning" : "standard"}`
-  );
 
   // Build streamText options
   const streamOptions: Parameters<typeof streamText>[0] = {

@@ -4,6 +4,7 @@
  * Type definitions for the sub-agent streaming architecture.
  */
 
+import type { UIMessage } from "ai";
 import type { GitHubRepo } from "@/lib/github/api";
 
 /**
@@ -42,6 +43,8 @@ export interface SubAgentTask {
   error?: string;
   /** Stream ID for frontend routing */
   streamId?: string;
+  /** Collected messages from execution */
+  messages?: UIMessage[];
 }
 
 /**

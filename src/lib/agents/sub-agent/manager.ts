@@ -11,6 +11,7 @@ import type {
   CreateSubAgentTaskOutput,
 } from "./types";
 import { executeSubAgentTask } from "./executor";
+import { ChunkConverter } from "../chunk-converter";
 
 /**
  * Sub-Agent Manager
@@ -35,6 +36,8 @@ export class SubAgentManager {
 
   /** Session ID to tasks mapping */
   private sessionTasks = new Map<string, Set<string>>();
+
+  private chunkConverter = new ChunkConverter();
 
   private constructor() {}
 
@@ -158,6 +161,24 @@ export class SubAgentManager {
    * Notify all listeners
    */
   private notify(progress: SubAgentProgress): void {
+    if (progress.type === "message-chunk" && progress.chunk) {
+      const task = this.tasks.get(progress.taskId);
+      if (task) {
+        const conversion = this.chunkConverter.processChunk(progress.taskId, progress.chunk);
+        if (conversion.isFinalized && conversion.message) {
+          task.messages = [conversion.message];
+          const textParts = conversion.message.parts
+            .filter((part) => typeof part === "object" && part !== null && "type" in part && (part as { type: string }).type === "text")
+            .map((part) => (part as { text: string }).text)
+            .join("\n")
+            .trim();
+          if (textParts) {
+            task.result = textParts;
+          }
+        }
+      }
+    }
+
     this.listeners.forEach((listener) => {
       try {
         listener(progress);
@@ -179,6 +200,29 @@ export class SubAgentManager {
    */
   getAllTasks(): SubAgentTask[] {
     return [...this.tasks.values()];
+  }
+
+  /**
+   * Get completed tasks by IDs
+   */
+  getCompletedTasks(taskIds: string[]): SubAgentTask[] {
+    return taskIds
+      .map((id) => this.tasks.get(id))
+      .filter(
+        (task): task is SubAgentTask =>
+          task !== undefined
+          && (task.status === "completed" || task.status === "failed")
+      );
+  }
+
+  /**
+   * Check if all tasks are completed
+   */
+  areTasksCompleted(taskIds: string[]): boolean {
+    return taskIds.every((id) => {
+      const task = this.tasks.get(id);
+      return task && (task.status === "completed" || task.status === "failed");
+    });
   }
 
   /**

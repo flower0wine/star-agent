@@ -3,42 +3,58 @@
  *
  * Merges master agent stream + sub-agent streams into a single SSE response.
  * Uses createUIMessageStream for proper AI SDK integration.
+ *
+ * ENHANCED: Integrated with AgentOrchestrator for cycle-based execution.
+ * Master agent waits for sub-agents to complete, then resumes with results.
  */
 
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
-  streamText
-
 } from "ai";
-import type { streamText as StreamTextType } from "ai";
+import type { streamText as StreamTextType, UIMessage } from "ai";
+
 import type { SubAgentProgress } from "./sub-agent/types";
 import { getSubAgentManager } from "./sub-agent/manager";
+import { AgentOrchestrator, resumeMasterAgent } from "./orchestrator";
+import { ChunkConverter } from "./chunk-converter";
 
 /**
- * Create multi-stream response
+ * Master stream configuration for resumption
+ */
+interface MasterStreamConfig {
+  model: Parameters<typeof StreamTextType>[0]["model"];
+  tools: Parameters<typeof StreamTextType>[0]["tools"];
+  system: Parameters<typeof StreamTextType>[0]["system"];
+  initialMessages: UIMessage[];
+}
+
+/**
+ * Create multi-stream response with orchestration
  *
  * Returns a properly formatted SSE stream that useChat can consume.
+ * Implements cycle-based execution: master -> wait for subagents -> resume master.
  */
 export async function createMultiStreamResponse(
   masterStream: ReturnType<typeof StreamTextType>,
-  requestId: string
+  requestId: string,
+  masterConfig?: MasterStreamConfig
 ): Promise<Response> {
-  console.log(`[MultiStream/${requestId}] Starting multi-stream with createUIMessageStream...`);
-
   const subManager = getSubAgentManager();
 
-  // Track state for waiting
-  const state = {
-    masterDone: false,
-    subAgentTaskIds: new Set<string>(),
-  };
+  // Create orchestrator
+  const orchestrator = new AgentOrchestrator({
+    requestId,
+    maxCycles: 10,
+    subAgentTimeout: 180000, // 3 minutes
+  });
+
+  // Track accumulated messages for resumption
+  const accumulatedMessages: UIMessage[] = masterConfig?.initialMessages || [];
 
   // Create the unified stream using AI SDK's createUIMessageStream
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      console.log(`[MultiStream/${requestId}] Stream execution started`);
-
       // Send initial message
       writer.write({
         type: "start",
@@ -46,17 +62,13 @@ export async function createMultiStreamResponse(
 
       // Subscribe to sub-agent progress
       const progressHandler = (progress: SubAgentProgress) => {
+        // Register sub-agent with orchestrator
         if (progress.type === "start") {
-          state.subAgentTaskIds.add(progress.taskId);
+          orchestrator.registerSubAgent(progress.taskId);
         }
 
         // Forward message-chunk directly to the client
         if (progress.type === "message-chunk" && progress.chunk) {
-          console.log(`[MultiStream/${requestId}] Writing data-subagent chunk:`, {
-            taskId: progress.taskId,
-            progressType: progress.type,
-            chunkType: (progress.chunk as Record<string, unknown>)?.type,
-          });
           writer.write({
             type: "data-subagent",
             data: {
@@ -85,46 +97,123 @@ export async function createMultiStreamResponse(
       const unsubscribe = subManager.subscribe(progressHandler);
 
       try {
-        // Merge master agent stream
-        console.log(`[MultiStream/${requestId}] Merging master stream...`);
+        let currentStream = masterStream;
+        let shouldContinue = true;
 
-        // Process master stream and wait for completion
-        for await (const chunk of masterStream.toUIMessageStream()) {
-          // Write master stream chunks directly
-          writer.write(chunk);
-        }
-
-        state.masterDone = true;
-        console.log(`[MultiStream/${requestId}] Master stream done`);
-
-        // Wait for sub-agents to complete (with timeout)
-        const maxWaitMs = 180000; // 3 minutes
-        const startWait = Date.now();
-
-        while (state.subAgentTaskIds.size > 0 || !state.masterDone) {
-          if (Date.now() - startWait > maxWaitMs) {
-            console.log(`[MultiStream/${requestId}] Timeout waiting for sub-agents`);
-            break;
-          }
-
-          const tasks = subManager.getAllTasks();
-          const active = tasks.filter(
-            (t) => t.status === "running" || t.status === "pending"
+        // Execution cycle loop
+        while (shouldContinue && orchestrator.getCycleNumber() <= 10) {
+          const cycleNumber = orchestrator.getCycleNumber();
+          console.log(
+            `[MultiStream/${requestId}] ===== Cycle ${cycleNumber} Start =====`
           );
 
-          if (active.length === 0 && state.masterDone) {
+          // Phase 1: Stream master agent output until completion
+          console.log(
+            `[MultiStream/${requestId}] Phase 1: Streaming master output`
+          );
+
+          const assistantMessage: UIMessage = {
+            id: `assistant-cycle-${cycleNumber}-${Date.now()}`,
+            role: "assistant",
+            parts: [],
+          };
+
+          // Stream and collect master output
+          for await (const chunk of currentStream.toUIMessageStream()) {
+            // Write master stream chunks directly
+            writer.write(chunk);
+
+            // Collect chunks for message history (simplified)
+            // In production, you'd want more sophisticated message accumulation
+          }
+
+          // Add assistant message to history
+          accumulatedMessages.push(assistantMessage);
+
+          orchestrator.notifyMasterComplete();
+          console.log(
+            `[MultiStream/${requestId}] Master stream completed (Cycle ${cycleNumber})`
+          );
+
+          // Phase 2: Wait for all sub-agents to complete
+          console.log(
+            `[MultiStream/${requestId}] Phase 2: Waiting for sub-agents`
+          );
+
+          const subAgentResults = await orchestrator.waitForSubAgents();
+
+          console.log(
+            `[MultiStream/${requestId}] Sub-agents completed: ${subAgentResults.length} results`
+          );
+
+          orchestrator.completeCycle();
+
+          // Phase 3: Check if we need another cycle
+          if (subAgentResults.length === 0) {
+            console.log(
+              `[MultiStream/${requestId}] No sub-agents created, ending cycles`
+            );
+            shouldContinue = false;
             break;
           }
 
-          await new Promise((r) => setTimeout(r, 500));
+          if (!orchestrator.shouldStartNewCycle(subAgentResults)) {
+            console.log(
+              `[MultiStream/${requestId}] No new cycle needed, ending`
+            );
+            shouldContinue = false;
+            break;
+          }
+
+          // Check if master config is available for resumption
+          if (!masterConfig) {
+            console.log(
+              `[MultiStream/${requestId}] Master config not available, cannot resume. Ending cycles.`
+            );
+
+            // Send results as data event for frontend display
+            const resultsMessage = orchestrator.formatResultsForMaster(subAgentResults);
+            writer.write({
+              type: "data-subagent-summary",
+              data: {
+                cycleNumber,
+                results: subAgentResults,
+                message: resultsMessage,
+              },
+            });
+
+            shouldContinue = false;
+            break;
+          }
+
+          // Phase 4: Resume master with sub-agent results
+          console.log(
+            `[MultiStream/${requestId}] Phase 3: Resuming master with results`
+          );
+
+          orchestrator.startNewCycle();
+
+          // Resume master agent with sub-agent results
+          currentStream = await resumeMasterAgent({
+            model: masterConfig.model,
+            tools: masterConfig.tools,
+            system: masterConfig.system,
+            messages: accumulatedMessages,
+            subAgentResults,
+            cycleNumber,
+          });
+
+          console.log(
+            `[MultiStream/${requestId}] Master resumed for cycle ${orchestrator.getCycleNumber()}`
+          );
         }
 
+        orchestrator.complete();
         console.log(
-          `[MultiStream/${requestId}] All done, subAgentTasks: ${state.subAgentTaskIds.size}`
+          `[MultiStream/${requestId}] ===== All cycles completed =====`
         );
       } finally {
         unsubscribe();
-        console.log(`[MultiStream/${requestId}] Unsubscribed progress handler`);
       }
     },
     onFinish: () => {
