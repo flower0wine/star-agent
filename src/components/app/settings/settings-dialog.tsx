@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import {
+  BotIcon,
   InfoIcon,
   MonitorIcon,
   MoonIcon,
@@ -42,7 +43,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 
-type SettingsSection = "appearance" | "model" | "conversation" | "data" | "about";
+import { AgentSettings } from "./agent-settings";
+
+type SettingsSection = "appearance" | "model" | "conversation" | "agents" | "data" | "about";
 
 interface SettingsSectionItem {
   id: SettingsSection;
@@ -54,6 +57,7 @@ const SETTINGS_SECTIONS: SettingsSectionItem[] = [
   { id: "appearance", label: "外观", icon: <PaletteIcon className="size-4" /> },
   { id: "model", label: "AI 模型", icon: <SparklesIcon className="size-4" /> },
   { id: "conversation", label: "对话", icon: <SlidersHorizontalIcon className="size-4" /> },
+  { id: "agents", label: "Agent 配置", icon: <BotIcon className="size-4" /> },
   { id: "data", label: "数据管理", icon: <ShieldIcon className="size-4" /> },
   { id: "about", label: "关于", icon: <InfoIcon className="size-4" /> },
 ];
@@ -69,7 +73,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl! p-0 gap-0 overflow-hidden"
+        className="max-w-4xl! min-w-2xl! w-[80vw]! h-[80vh]! p-0 gap-0 overflow-hidden"
         showCloseButton={false}
       >
         <DialogHeader className="sr-only">
@@ -77,9 +81,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <DialogDescription>管理应用程序设置</DialogDescription>
         </DialogHeader>
 
-        <div className="flex h-[480px]">
+        <div className="flex h-full min-h-0">
           {/* Left sidebar */}
-          <div className="w-48 border-r bg-muted/30 p-2 flex flex-col gap-1">
+          <div className="w-48 border-r bg-muted/30 p-2 flex flex-col gap-1 overflow-y-auto">
             <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
               设置
             </div>
@@ -100,10 +104,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </div>
 
           {/* Right content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto p-6">
             {activeSection === "appearance" && <AppearanceSettings />}
             {activeSection === "model" && <ModelSettings />}
             {activeSection === "conversation" && <ConversationSettings />}
+            {activeSection === "agents" && <AgentSettings />}
             {activeSection === "data" && <DataSettings />}
             {activeSection === "about" && <AboutSettings />}
           </div>

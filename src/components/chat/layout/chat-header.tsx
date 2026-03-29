@@ -1,11 +1,16 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { LogOutIcon } from "lucide-react";
+import { LogOutIcon, RefreshCwIcon } from "lucide-react";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
+
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface ChatHeaderProps {
   /** 左侧内容插槽 (如 Agent 选择器) */
@@ -16,6 +21,14 @@ export interface ChatHeaderProps {
   showLogout?: boolean;
   /** 登出回调 */
   onLogout?: () => void;
+  /** 是否显示刷新按钮 */
+  showRefresh?: boolean;
+  /** 是否正在刷新 */
+  isRefreshing?: boolean;
+  /** 刷新回调 */
+  onRefresh?: () => void;
+  /** 上次刷新时间提示 */
+  refreshTooltip?: string;
   /** 自定义类名 */
   className?: string;
 }
@@ -29,6 +42,10 @@ export function ChatHeader({
   username,
   showLogout,
   onLogout,
+  showRefresh,
+  isRefreshing,
+  onRefresh,
+  refreshTooltip,
   className,
 }: ChatHeaderProps) {
   return (
@@ -66,6 +83,34 @@ export function ChatHeader({
 
         {/* 右侧操作区 */}
         <div className="flex items-center gap-2">
+          {/* 刷新按钮 */}
+          {showRefresh && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                  className="gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCwIcon
+                    className={cn("size-4", isRefreshing && "animate-spin")}
+                  />
+                  <span className="hidden sm:inline">
+                    {isRefreshing ? "刷新中..." : "刷新仓库"}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              {refreshTooltip && (
+                <TooltipContent>
+                  <p>{refreshTooltip}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          )}
+
+          {/* 登出按钮 */}
           {showLogout && (
             <Button
               variant="ghost"

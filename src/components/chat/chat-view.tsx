@@ -1,21 +1,20 @@
 /**
  * Chat View Component
  *
- * 可复用的聊天视图组件，支持通过 props 传入会话 ID 和 Agent ID
- * 用于 /chat (新对话) 和 /chat/[conversationId] (已有对话) 页面
+ * 对话视图组件，用于 /chat/[conversationId] 页面展示已有对话
+ * 需要传入有效的 conversationId
  */
 
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import type { ChatOnDataCallback, UIMessage } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
-import { useChatHistoryStore } from "@/stores/chat-history-store";
+import { usePendingMessageStore } from "@/stores/pending-message-store";
 
 import {
   ChatLayout,
@@ -67,15 +66,13 @@ const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
 };
 
 interface ChatViewProps {
-  /** 会话 ID，如果为 null 则表示新对话 */
-  conversationId: string | null;
+  /** 会话 ID（必须提供有效的 ID） */
+  conversationId: string;
   /** 初始 Agent ID，从会话元数据获取 */
   initialAgentId?: AgentId;
 }
 
 export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewProps) {
-  const router = useRouter();
-
   // Agent selection - 使用初始值，但允许用户切换
   const [selectedAgent, setSelectedAgent] = useState<AgentId>(initialAgentId);
 
@@ -128,7 +125,10 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     [processChunk, handleProgress]
   );
 
-  // Chat hook with persistence
+  // Pending message store for cross-page message passing
+  const { consumePendingMessage } = usePendingMessageStore();
+
+  // Chat hook with persistence - only active when we have a conversationId
   const {
     messages,
     sendMessage,
@@ -137,7 +137,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     regenerate,
     stop,
     isLoadingMessages,
-    activeConversationId,
   } = useAgentChat({
     api: "/api/chat",
     agentId: selectedAgent,
@@ -147,13 +146,21 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     username,
   });
 
-  // 当创建新会话时，更新 URL
+  // 当加载完成后，检查是否有待发送的消息
+  const pendingMessageSentRef = useRef(false);
   useEffect(() => {
-    if (activeConversationId && !conversationId) {
-      // 新对话创建后，更新 URL
-      router.replace(`/chat/${activeConversationId}`);
+    if (!conversationId || isLoadingMessages || pendingMessageSentRef.current) {
+      return;
     }
-  }, [activeConversationId, conversationId, router]);
+
+    const pendingMessage = consumePendingMessage(conversationId);
+
+    if (pendingMessage) {
+      pendingMessageSentRef.current = true;
+
+      sendMessage({ text: pendingMessage.text });
+    }
+  }, [conversationId, isLoadingMessages, consumePendingMessage, sendMessage, messages.length]);
 
   const isChatLoading = status === "submitted" || status === "streaming";
 

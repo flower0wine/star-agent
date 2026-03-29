@@ -2,14 +2,14 @@
  * Chat Page (New Conversation)
  *
  * 新对话入口页面
- * 当用户发送第一条消息时，自动创建会话并跳转到 /chat/[conversationId]
+ * 只负责展示输入界面、创建会话 ID、跳转到 /chat/[conversationId]
+ * 不处理任何消息发送逻辑
  */
 
 "use client";
 
-import { ChatView } from "@/components/chat/chat-view";
+import { NewChatView } from "@/components/chat";
 
 export default function ChatPage() {
-  // 新对话：conversationId 为 null
-  return <ChatView conversationId={null} />;
+  return <NewChatView />;
 }

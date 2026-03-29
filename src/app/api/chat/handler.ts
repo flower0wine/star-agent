@@ -12,7 +12,8 @@ import { formatReposForInitialContext } from "@/lib/github/utils";
 import { createStarAgent } from "@/agents/star";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
-import type { ChatRequestBody } from "./types";
+import type { ChatRequestBody, AgentConfigPayload } from "./types";
+import { getCoreTools } from "@/lib/agents/tool-registry";
 
 /**
  * Handle Star Agent requests
@@ -54,17 +55,34 @@ export async function handleStarAgent(
     );
   }
 
+  // Extract agent configuration
+  const agentConfig: AgentConfigPayload = body.agentConfig || {};
+
   // Create Star Agent with repos context
   const starAgent = createStarAgent(finalRepos);
 
   // Get tools and prompt from agent
-  const tools = starAgent.getTools({});
+  let tools = starAgent.getTools({});
   const reposContext = formatReposForInitialContext(finalRepos);
-  const systemPrompt = starAgent.getSystemPrompt({
+  let systemPrompt = starAgent.getSystemPrompt({
     username,
     repos: finalRepos,
     reposContext,
   });
+
+  // Apply agent configuration: filter tools based on enabledTools
+  if (agentConfig.enabledTools && agentConfig.enabledTools.length > 0) {
+    const coreTools = getCoreTools("star");
+    const enabledSet = new Set([...agentConfig.enabledTools, ...coreTools]);
+    tools = Object.fromEntries(
+      Object.entries(tools).filter(([key]) => enabledSet.has(key))
+    );
+  }
+
+  // Apply agent configuration: append additional system prompt
+  if (agentConfig.additionalSystemPrompt) {
+    systemPrompt = `${systemPrompt}\n\n## 用户附加指令\n${agentConfig.additionalSystemPrompt}`;
+  }
 
   // Convert messages to model format
   // ignoreIncompleteToolCalls: true to handle cases where user stops mid-tool-call

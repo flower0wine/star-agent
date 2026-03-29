@@ -13,8 +13,9 @@ import type { GitHubRepo } from "@/lib/github/api";
 import { createMasterAgent } from "@/agents/master";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
-import type { ChatRequestBody } from "./types";
+import type { ChatRequestBody, AgentConfigPayload } from "./types";
 import { createMultiStreamResponse } from "@/lib/agents/multi-stream";
+import { getCoreTools } from "@/lib/agents/tool-registry";
 
 /**
  * Handle Master Agent requests
@@ -56,15 +57,32 @@ export async function handleMasterAgent(
   // Get model based on provider
   const modelInstance = getModel();
 
+  // Extract agent configuration
+  const agentConfig: AgentConfigPayload = body.agentConfig || {};
+
   // Create Master Agent with repos and model
   const masterAgent = createMasterAgent(finalRepos, username);
 
   // Get tools and system prompt from agent
-  const tools = masterAgent.getTools({ requestId });
-  const systemPrompt = masterAgent.getSystemPrompt({
+  let tools = masterAgent.getTools({ requestId });
+  let systemPrompt = masterAgent.getSystemPrompt({
     username,
     repos: finalRepos,
   });
+
+  // Apply agent configuration: filter tools based on enabledTools
+  if (agentConfig.enabledTools && agentConfig.enabledTools.length > 0) {
+    const coreTools = getCoreTools("master");
+    const enabledSet = new Set([...agentConfig.enabledTools, ...coreTools]);
+    tools = Object.fromEntries(
+      Object.entries(tools).filter(([key]) => enabledSet.has(key))
+    );
+  }
+
+  // Apply agent configuration: append additional system prompt
+  if (agentConfig.additionalSystemPrompt) {
+    systemPrompt = `${systemPrompt}\n\n## 用户附加指令\n${agentConfig.additionalSystemPrompt}`;
+  }
 
 
   // Convert messages to model format

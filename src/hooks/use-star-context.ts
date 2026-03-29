@@ -1,14 +1,15 @@
 /**
  * Star Context Hook
  *
- * Manages GitHub user authentication and starred repositories state.
- * Handles localStorage persistence for user session.
+ * 管理 GitHub 用户认证和 Star 仓库状态
+ * 基于 useGitHubAuth 实现，提供向后兼容的 API
  */
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import type { GitHubRepo } from "@/lib/github/api";
+
+import { useGitHubAuth } from "./use-github-auth";
 
 export interface StarContext {
   username: string;
@@ -32,101 +33,47 @@ export interface UseStarContextReturn {
   logout: () => void;
   /** Get context object for API calls */
   getContext: () => StarContext;
+  /** 刷新 Star 仓库（新增） */
+  refreshStars: () => Promise<void>;
+  /** 是否正在刷新（新增） */
+  isRefreshing: boolean;
+  /** 上次获取时间（新增） */
+  lastFetchedAt: number | null;
+  /** 缓存是否过期（新增） */
+  isCacheStale: boolean;
 }
-
-const STORAGE_KEYS = {
-  username: "star_username",
-  repos: "star_repos",
-} as const;
 
 /**
  * Hook for managing Star Agent authentication context
  */
 export function useStarContext(): UseStarContextReturn {
-  const [username, setUsername] = useState("");
-  const [repos, setRepos] = useState<GitHubRepo[]>([]);
-  const [isVerified, setIsVerified] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Restore session from localStorage on mount
-  useEffect(() => {
-    const savedUsername = localStorage.getItem(STORAGE_KEYS.username);
-    const savedRepos = localStorage.getItem(STORAGE_KEYS.repos);
-
-    if (savedUsername && savedRepos) {
-      try {
-        const parsedRepos = JSON.parse(savedRepos) as GitHubRepo[];
-        setUsername(savedUsername);
-        setRepos(parsedRepos);
-        setIsVerified(true);
-      } catch {
-        // Invalid stored data, clear it
-        localStorage.removeItem(STORAGE_KEYS.username);
-        localStorage.removeItem(STORAGE_KEYS.repos);
-      }
-    }
-  }, []);
-
-  // Login with username
-  const login = useCallback(async (inputUsername: string) => {
-    const trimmedUsername = inputUsername.trim();
-    if (!trimmedUsername)
-      return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/github/stars/${trimmedUsername}`);
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "获取仓库失败");
-      }
-
-      const data = await response.json();
-      const fetchedRepos = data.repos as GitHubRepo[];
-
-      // Persist to localStorage
-      localStorage.setItem(STORAGE_KEYS.username, trimmedUsername);
-      localStorage.setItem(STORAGE_KEYS.repos, JSON.stringify(fetchedRepos));
-
-      // Update state
-      setUsername(trimmedUsername);
-      setRepos(fetchedRepos);
-      setIsVerified(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "发生未知错误");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Logout and clear session
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEYS.username);
-    localStorage.removeItem(STORAGE_KEYS.repos);
-    setUsername("");
-    setRepos([]);
-    setIsVerified(false);
-    setError(null);
-  }, []);
-
-  // Get context for API calls
-  const getContext = useCallback((): StarContext => ({
+  const {
     username,
     repos,
-  }), [username, repos]);
+    isVerified,
+    isLoading,
+    isRefreshing,
+    error,
+    lastFetchedAt,
+    isCacheStale,
+    login,
+    logout,
+    refreshStars,
+    getContext,
+  } = useGitHubAuth();
 
   return {
     username,
     repos,
     isVerified,
     isLoading,
+    isRefreshing,
     error,
+    lastFetchedAt,
+    isCacheStale,
     login,
     logout,
+    refreshStars,
     getContext,
   };
 }
