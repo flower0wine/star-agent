@@ -34,7 +34,7 @@ export function ChatHeader({
   return (
     <header
       className={cn(
-        "relative z-20 shrink-0",
+        "sticky top-0 z-50 shrink-0",
         "border-b border-border/40",
         "bg-background/80 backdrop-blur-xl backdrop-saturate-150",
         "px-4 py-3",

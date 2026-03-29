@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { UIMessage } from "ai";
 import type { SubAgentCard } from "@/types/agent";
 import { ChunkConverter } from "@/lib/agents/chunk-converter";
@@ -64,56 +64,114 @@ export function useSubAgentMessages(
 
   const converterRef = useRef<ChunkConverter>(new ChunkConverter());
 
+  // ===== 性能优化: 批量累积 + requestAnimationFrame =====
+  // 累积待处理的原始 chunks (延迟处理，避免主线程阻塞)
+  const pendingChunksRef = useRef<Array<{ taskId: string; chunk: unknown }>>([]);
+  // 累积待更新的消息状态
+  const pendingMessagesRef = useRef<Map<string, UIMessage[]>>(new Map());
+  // 累积待更新的卡片状态
+  const pendingCardsRef = useRef<Map<string, Partial<SubAgentCard>>>(new Map());
+  // RAF handle
+  const rafRef = useRef<number | null>(null);
+  // 标记是否有待处理更新
+  const hasPendingRef = useRef(false);
+
+  // 清理 RAF
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
+
   /**
-   * Get or create a completed messages array for a task
+   * 批量处理累积的 chunks 并刷新状态 (RAF 核心)
+   * 使用 requestAnimationFrame 确保在浏览器空闲时处理
    */
-  const getOrCreateMessages = useCallback((taskId: string): UIMessage[] => {
-    return subAgentMessages.get(taskId) || [];
-  }, [subAgentMessages]);
+  const flushPendingUpdates = useCallback(() => {
+    rafRef.current = null;
+    hasPendingRef.current = false;
+
+    // 1. 批量处理累积的 chunks
+    const chunks = pendingChunksRef.current;
+    if (chunks.length > 0) {
+      pendingChunksRef.current = [];
+      for (const { taskId, chunk } of chunks) {
+        const result = converterRef.current.processChunk(taskId, chunk);
+        if (result.isFinalized && result.message) {
+          pendingMessagesRef.current.set(taskId, [result.message]);
+        } else if (result.streamingMessage) {
+          pendingMessagesRef.current.set(taskId, [result.streamingMessage]);
+        }
+        // 检查完成状态
+        if ((chunk as Record<string, unknown>).type === "finish") {
+          pendingCardsRef.current.set(taskId, {
+            status: "completed" as const,
+            progress: 100,
+          });
+        }
+      }
+    }
+
+    // 2. 批量刷新消息状态 (先复制再清理，避免 React 并发模式问题)
+    if (pendingMessagesRef.current.size > 0) {
+      const messagesToFlush = new Map(pendingMessagesRef.current);
+      pendingMessagesRef.current.clear();
+      setSubAgentMessages((prev) => {
+        const next = new Map(prev);
+        messagesToFlush.forEach((msgs, taskId) => {
+          next.set(taskId, msgs);
+        });
+        return next;
+      });
+    }
+
+    // 3. 批量刷新卡片状态 (先复制再清理，避免 React 并发模式问题)
+    if (pendingCardsRef.current.size > 0) {
+      const cardsToFlush = new Map(pendingCardsRef.current);
+      pendingCardsRef.current.clear();
+      setSubAgentCards((prev) => {
+        const next = new Map(prev);
+        cardsToFlush.forEach((update, taskId) => {
+          const existing = next.get(taskId);
+          if (existing) {
+            next.set(taskId, { ...existing, ...update });
+          }
+        });
+        return next;
+      });
+    }
+  }, []);
+
+  /**
+   * 调度 RAF 更新 (每帧最多执行一次)
+   */
+  const scheduleUpdate = useCallback(() => {
+    if (!hasPendingRef.current) {
+      hasPendingRef.current = true;
+      rafRef.current = requestAnimationFrame(flushPendingUpdates);
+    }
+  }, [flushPendingUpdates]);
 
   /**
    * Process a message-chunk from sub-agent
-   * Uses ChunkConverter for streaming message assembly
+   * 优化: 延迟处理 chunk，仅累积原始数据，在 RAF 中批量处理
+   * 这样即使有多个 sub-agent 并发，也不会阻塞主线程
    */
   const processChunk = useCallback(
     (taskId: string, chunk: unknown) => {
-      const result = converterRef.current.processChunk(taskId, chunk);
-
-      if (result.isFinalized && result.message) {
-        setSubAgentMessages((prev) => {
-          const next = new Map(prev);
-          next.set(taskId, [result.message!]);
-          return next;
-        });
-      } else if (result.streamingMessage) {
-        setSubAgentMessages((prev) => {
-          const next = new Map(prev);
-          next.set(taskId, [result.streamingMessage!]);
-          return next;
-        });
-      }
-
-      const state = converterRef.current.getState(taskId);
-      if (state && (chunk as Record<string, unknown>).type === "finish") {
-        setSubAgentCards((prev) => {
-          const next = new Map(prev);
-          const card = next.get(taskId);
-          if (card) {
-            next.set(taskId, {
-              ...card,
-              status: "completed" as const,
-              progress: 100,
-            });
-          }
-          return next;
-        });
-      }
+      // 只累积原始 chunk，不立即处理
+      pendingChunksRef.current.push({ taskId, chunk });
+      // 调度 RAF 更新
+      scheduleUpdate();
     },
-    [getOrCreateMessages]
+    [scheduleUpdate]
   );
 
   /**
    * Handle progress/complete/error events
+   * 优化: 使用批量更新，"start" 事件立即处理（创建卡片），其他事件延迟批量处理
    */
   const handleProgress = useCallback(
     (
@@ -123,10 +181,10 @@ export function useSubAgentMessages(
       result?: string,
       error?: string
     ) => {
-      setSubAgentCards((prev) => {
-        const next = new Map(prev);
-
-        if (progressType === "start") {
+      // "start" 事件需要立即处理，否则 UI 不会显示新卡片
+      if (progressType === "start") {
+        setSubAgentCards((prev) => {
+          const next = new Map(prev);
           next.set(taskId, {
             taskId,
             status: "running",
@@ -137,40 +195,35 @@ export function useSubAgentMessages(
             finalResult: undefined,
             error: undefined,
           });
-        } else if (progressType === "complete") {
-          const card = next.get(taskId);
-          if (card) {
-            next.set(taskId, {
-              ...card,
-              status: "completed",
-              progress: 100,
-              finalResult: result,
-            });
-          }
-        } else if (progressType === "error") {
-          const card = next.get(taskId);
-          if (card) {
-            next.set(taskId, {
-              ...card,
-              status: "failed",
-              progress: progress ?? card.progress,
-              error,
-            });
-          }
-        } else if (progressType === "progress") {
-          const card = next.get(taskId);
-          if (card) {
-            next.set(taskId, {
-              ...card,
-              progress: progress ?? card.progress,
-            });
-          }
-        }
+          return next;
+        });
+        return;
+      }
 
-        return next;
-      });
+      // 其他事件延迟批量处理
+      if (progressType === "complete") {
+        pendingCardsRef.current.set(taskId, {
+          status: "completed",
+          progress: 100,
+          finalResult: result,
+        });
+      } else if (progressType === "error") {
+        pendingCardsRef.current.set(taskId, {
+          status: "failed",
+          progress,
+          error,
+        });
+      } else if (progressType === "progress") {
+        const existing = pendingCardsRef.current.get(taskId) || {};
+        pendingCardsRef.current.set(taskId, {
+          ...existing,
+          progress,
+        });
+      }
+
+      scheduleUpdate();
     },
-    []
+    [scheduleUpdate]
   );
 
   /**

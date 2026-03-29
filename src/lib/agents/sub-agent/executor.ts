@@ -170,7 +170,8 @@ export async function executeSubAgentTask(
           const chunkType = chunkObj.type as string;
           if (chunkType === "finish") {
             currentProgress = 100;
-            task.result = "处理完成";
+            // 注意: 不要在这里覆盖 task.result
+            // notify() 会在处理 "finish" chunk 时设置实际的 task.result
           } else if (chunkType === "text-delta" && currentProgress < 90) {
             currentProgress = Math.min(currentProgress + 5, 90);
             onProgress({
@@ -183,8 +184,10 @@ export async function executeSubAgentTask(
       }
     }
 
-    // Mark complete
-    task.result = task.result || "处理完成";
+    // Mark complete - 只有在 task.result 未被设置时才使用默认值
+    if (!task.result) {
+      task.result = "处理完成";
+    }
     currentProgress = 100;
     onProgress({
       taskId: task.id,

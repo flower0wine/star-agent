@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
@@ -127,31 +127,42 @@ export default function ChatPage() {
 
   const isChatLoading = status === "submitted" || status === "streaming";
 
+  // 跟踪已处理的 taskId，避免重复处理
+  const processedTaskIdsRef = useRef<Set<string>>(new Set());
+
   // Extract sub-agent task IDs from messages (for Master Agent)
+  // 优化: 使用增量检测，只处理新消息，避免流式传输时频繁执行
   useEffect(() => {
     if (selectedAgent !== "master") {
       resetSubAgentMessages();
+      processedTaskIdsRef.current.clear();
       return;
     }
 
-    messages.forEach((message) => {
-      if (message.role !== "assistant")
+    // 只检查最后一条消息，避免 O(n×m) 遍历
+    const lastMessage = messages.at(-1);
+    if (!lastMessage || lastMessage.role !== "assistant")
+      return;
+
+    lastMessage.parts.forEach((part: unknown) => {
+      if (!part || typeof part !== "object")
         return;
 
-      message.parts.forEach((part: unknown) => {
-        if (!part || typeof part !== "object")
-          return;
-
-        const p = part as Record<string, unknown>;
-        if (p.type === "tool-result" && p.toolCallId && p.result && typeof p.result === "object") {
-          const result = p.result as Record<string, unknown>;
-          if (result.taskId && typeof result.taskId === "string" && result.taskId.startsWith("subagent-")) {
-            handleProgress(result.taskId, "start", 0);
-          }
+      const p = part as Record<string, unknown>;
+      if (p.type === "tool-result" && p.toolCallId && p.result && typeof p.result === "object") {
+        const result = p.result as Record<string, unknown>;
+        if (
+          result.taskId
+          && typeof result.taskId === "string"
+          && result.taskId.startsWith("subagent-")
+          && !processedTaskIdsRef.current.has(result.taskId)
+        ) {
+          processedTaskIdsRef.current.add(result.taskId);
+          handleProgress(result.taskId, "start", 0);
         }
-      });
+      }
     });
-  }, [messages, selectedAgent, handleProgress, resetSubAgentMessages]);
+  }, [messages.length, selectedAgent, handleProgress, resetSubAgentMessages]);
 
   // Input ref for submit handler
   const inputRef = useRef(input);
@@ -212,8 +223,18 @@ export default function ChatPage() {
   // Current suggestions based on agent
   const suggestions = SUGGESTIONS[selectedAgent] || [];
 
-  // Chat content component (reused in both layouts)
-  const chatContent = (
+  const chatInputArea = (
+    <ChatInputArea
+      value={input}
+      onChange={handleInputChange}
+      onSubmit={handleSubmit}
+      onStop={stop}
+      isLoading={isChatLoading}
+      placeholder={selectedAgent === "star" ? "询问关于你的仓库..." : "输入消息..."}
+    />
+  );
+
+  const chatMessages = (
     <>
       <Conversation className="flex-1 min-h-0">
         <ConversationContent>
@@ -260,16 +281,6 @@ export default function ChatPage() {
           )}
         </ConversationContent>
       </Conversation>
-
-      {/* Input Area */}
-      <ChatInputArea
-        value={input}
-        onChange={handleInputChange}
-        onSubmit={handleSubmit}
-        onStop={stop}
-        isLoading={isChatLoading}
-        placeholder={selectedAgent === "star" ? "询问关于你的仓库..." : "输入消息..."}
-      />
     </>
   );
 
@@ -291,11 +302,12 @@ export default function ChatPage() {
           onLogout={handleLogout}
         />
       )}
+      footer={chatInputArea}
     >
       {selectedAgent === "master" && subAgentCards.size > 0 ? (
         <ResizablePanelGroup className="flex-1">
           <ResizablePanel defaultSize="50%" minSize="35%" maxSize="65%">
-            <div className="flex flex-col h-full">{chatContent}</div>
+            <div className="flex flex-col h-full pb-[100px]">{chatMessages}</div>
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize="50%">
@@ -307,7 +319,7 @@ export default function ChatPage() {
           </ResizablePanel>
         </ResizablePanelGroup>
       ) : (
-        <div className="flex-1 flex flex-col min-w-0">{chatContent}</div>
+        <div className="flex-1 flex flex-col min-w-0 pb-[100px]">{chatMessages}</div>
       )}
     </ChatLayout>
   );
