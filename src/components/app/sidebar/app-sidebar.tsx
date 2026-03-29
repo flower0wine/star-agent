@@ -34,13 +34,14 @@ export function AppSidebar() {
   const { username } = useStarStore();
 
   const handleNewConversation = async () => {
-    const conversation = await createNewConversation("star", username);
-    selectConversation(conversation.id);
+    // 清除当前选择，导航到新对话页面
+    selectConversation(null);
     router.push("/chat");
   };
 
   const handleSelectConversation = (conversationId: string) => {
-    router.push("/chat");
+    // 导航到会话详情页
+    router.push(`/chat/${conversationId}`);
   };
 
   const handleRename = (id: string, title: string) => {

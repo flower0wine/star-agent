@@ -52,18 +52,26 @@ export function useConversationPersistence<TMessage extends UIMessage = UIMessag
 
   // 跟踪上一次的状态，用于检测流式传输结束
   const prevStatusRef = useRef(status);
-  const prevConversationIdRef = useRef(conversationId);
   const isSavingRef = useRef(false);
+  // 使用 undefined 初始化，以区分"未初始化"和"null"
+  const prevConversationIdRef = useRef<string | null | undefined>(undefined);
 
   // 当对话 ID 变化时，加载消息
   useEffect(() => {
-    if (conversationId === prevConversationIdRef.current) {
+    // 首次渲染或 conversationId 变化时执行
+    const isFirstRender = prevConversationIdRef.current === undefined;
+    const hasChanged = conversationId !== prevConversationIdRef.current;
+
+    if (!isFirstRender && !hasChanged) {
       return;
     }
     prevConversationIdRef.current = conversationId;
 
     if (!conversationId) {
-      setMessages([] as TMessage[]);
+      // 清空消息（新对话或切换到新对话页面）
+      if (!isFirstRender) {
+        setMessages([] as TMessage[]);
+      }
       setActiveConversationId(null);
       return;
     }

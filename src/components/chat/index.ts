@@ -1,3 +1,6 @@
+// Chat View
+export { ChatView } from "./chat-view";
+
 // Content components
 export { ChatError, ChatMessages, ChatMessageWrapper, EmptyState } from "./content";
 export type {
