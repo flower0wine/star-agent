@@ -7,12 +7,14 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { ChatOnDataCallback, UIMessage } from "ai";
+import { motion, AnimatePresence } from "motion/react";
+
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
-import type { ChatOnDataCallback, UIMessage } from "ai";
-import { motion, AnimatePresence } from "motion/react";
+import { useChatHistoryStore } from "@/stores/chat-history-store";
 
 // Layout components
 import {
@@ -117,12 +119,25 @@ export default function ChatPage() {
     [processChunk, handleProgress]
   );
 
-  // Chat hook
-  const { messages, sendMessage, status, error: chatError, regenerate, stop } = useAgentChat({
+  // Conversation history state
+  const { currentConversationId } = useChatHistoryStore();
+
+  // Chat hook with persistence
+  const {
+    messages,
+    sendMessage,
+    status,
+    error: chatError,
+    regenerate,
+    stop,
+    isLoadingMessages,
+  } = useAgentChat({
     api: "/api/chat",
     agentId: selectedAgent,
     context: selectedAgent === "star" || selectedAgent === "master" ? { username, repos } : {},
     onData: handleData,
+    conversationId: currentConversationId,
+    username,
   });
 
   const isChatLoading = status === "submitted" || status === "streaming";
@@ -269,7 +284,7 @@ export default function ChatPage() {
           {/* Error display */}
           {chatError && <ChatError message={chatError.message || String(chatError)} />}
 
-          {/* Loading indicator */}
+          {/* Loading indicator for new chat */}
           {isChatLoading && messages.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -277,6 +292,17 @@ export default function ChatPage() {
               className="mt-4"
             >
               <MessageLoadingIndicator />
+            </motion.div>
+          )}
+
+          {/* Loading indicator for loading messages from DB */}
+          {isLoadingMessages && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center py-8"
+            >
+              <div className="text-sm text-muted-foreground">加载对话历史...</div>
             </motion.div>
           )}
         </ConversationContent>
