@@ -25,7 +25,7 @@ import type { SuggestionItem } from "@/components/chat";
 
 import { AgentSelector } from "@/components/agents/agent-selector";
 import type { AgentId } from "@/components/agents/agent-selector";
-import { StarLogin } from "@/components/star/star-login";
+import { StarLogin } from "@/components/agents/star";
 
 const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
   star: [

@@ -31,11 +31,14 @@ import {
   Conversation,
   ConversationContent,
 } from "@/components/ai-elements/conversation";
-import { MessageRenderer, MessageLoadingIndicator } from "@/components/star";
-import { SubAgentPanel } from "@/components/star/sub-agent-panel";
+import {
+  MessageRenderer,
+  MessageLoadingIndicator,
+  StarLogin,
+} from "@/components/agents/star";
+import { SubAgentPanel } from "@/components/agents/master";
 import { AgentSelector } from "@/components/agents/agent-selector";
 import type { AgentId } from "@/components/agents/agent-selector";
-import { StarLogin } from "@/components/star/star-login";
 
 import {
   ResizableHandle,
@@ -349,7 +352,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
         />
       )}
     >
-      {selectedAgent === "master" && subAgentCards.size > 0 ? (
+      {selectedAgent === "master" && subAgentMessages.size > 0 ? (
         <ResizablePanelGroup className="flex-1">
           <ResizablePanel defaultSize="50%" minSize="35%" maxSize="65%">
             <div className="flex h-full flex-col overflow-hidden">
@@ -367,7 +370,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
           </ResizablePanel>
         </ResizablePanelGroup>
       ) : (
-        <div className="flex h-full flex-col min-w-0 overflow-hidden">
+        <div className="flex h-full w-full flex-col min-w-0 overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto">{chatMessages}</div>
           {chatInputArea}
         </div>

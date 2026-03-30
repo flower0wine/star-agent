@@ -27,7 +27,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { GitHubRepo } from "@/components/star/github-repo";
+import { GitHubRepo } from "@/components/agents/star/github-repo";
 import {
   UserIcon,
   BotIcon,

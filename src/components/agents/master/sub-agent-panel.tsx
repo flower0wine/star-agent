@@ -34,7 +34,7 @@ import {
   HashIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MessageRenderer, MessageLoadingIndicator } from "./message-renderer";
+import { MessageRenderer, MessageLoadingIndicator } from "@/components/chat/message-renderer";
 
 /**
  * SubAgentPanel props
