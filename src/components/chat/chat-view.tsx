@@ -348,12 +348,14 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
           onLogout={handleLogout}
         />
       )}
-      footer={chatInputArea}
     >
       {selectedAgent === "master" && subAgentCards.size > 0 ? (
         <ResizablePanelGroup className="flex-1">
           <ResizablePanel defaultSize="50%" minSize="35%" maxSize="65%">
-            <div className="flex flex-col h-full pb-[100px]">{chatMessages}</div>
+            <div className="flex h-full flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-auto">{chatMessages}</div>
+              {chatInputArea}
+            </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize="50%">
@@ -365,7 +367,10 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
           </ResizablePanel>
         </ResizablePanelGroup>
       ) : (
-        <div className="flex-1 flex flex-col min-w-0 pb-[100px]">{chatMessages}</div>
+        <div className="flex h-full flex-col min-w-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto">{chatMessages}</div>
+          {chatInputArea}
+        </div>
       )}
     </ChatLayout>
   );

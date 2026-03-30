@@ -31,7 +31,7 @@ export function ChatLayout({
   return (
     <div
       className={cn(
-        "flex min-h-screen flex-col relative overflow-hidden",
+        "flex h-screen flex-col relative overflow-hidden",
         "bg-background",
         className
       )}
@@ -43,7 +43,7 @@ export function ChatLayout({
       {header}
 
       {/* 主要内容区域 */}
-      <main className="relative z-10 flex flex-1 flex-col min-h-0">
+      <main className="relative z-10 flex flex-1 min-h-0 overflow-hidden">
         {children}
       </main>
 
