@@ -11,13 +11,18 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 import type { GitHubRepo } from "@/lib/github/api";
 import {
-  clearUserCache,
   fetchStarsWithCache,
   fetchUserInfo,
   refreshStarsCache,
 } from "@/lib/github/service";
 import type { GitHubUserInfo } from "@/lib/github/service";
-import { getStarsCacheInfo } from "@/lib/storage";
+import {
+  getOrCreateAgentConfig,
+  getStarsCache,
+  updateStaticConfig,
+} from "@/lib/storage";
+import { DEFAULT_STAR_STATIC_CONFIG } from "@/agents/star/static-config";
+import type { StarAgentStaticConfig } from "@/agents/star/static-config";
 
 // ============================================================================
 // Types
@@ -34,6 +39,8 @@ export interface UseGitHubAuthReturn {
   isVerified: boolean;
   /** 是否正在加载 */
   isLoading: boolean;
+  /** 是否正在恢复本地会话 */
+  isRestoring: boolean;
   /** 是否正在刷新 */
   isRefreshing: boolean;
   /** 错误信息 */
@@ -59,7 +66,32 @@ export interface UseGitHubAuthReturn {
 const STORAGE_KEYS = {
   username: "github_username",
   user: "github_user",
+  // Legacy keys for backward compatibility
+  legacyUsername: "star_username",
+  legacyRepos: "star_repos",
 } as const;
+
+const STAR_AGENT_ID = "star";
+
+async function getFetchConfig(): Promise<StarAgentStaticConfig> {
+  const config = await getOrCreateAgentConfig<StarAgentStaticConfig>(
+    STAR_AGENT_ID,
+    DEFAULT_STAR_STATIC_CONFIG
+  );
+
+  return {
+    ...DEFAULT_STAR_STATIC_CONFIG,
+    ...config.staticConfig,
+  };
+}
+
+async function saveLastFetchedAt(lastFetchedAt: number): Promise<void> {
+  await updateStaticConfig<StarAgentStaticConfig>(
+    STAR_AGENT_ID,
+    { lastFetchedAt },
+    DEFAULT_STAR_STATIC_CONFIG
+  );
+}
 
 // ============================================================================
 // Hook Implementation
@@ -71,6 +103,7 @@ export function useGitHubAuth(): UseGitHubAuthReturn {
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [isVerified, setIsVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
@@ -86,36 +119,87 @@ export function useGitHubAuth(): UseGitHubAuthReturn {
     isInitializedRef.current = true;
 
     const restoreSession = async () => {
-      const savedUsername = localStorage.getItem(STORAGE_KEYS.username);
+      const savedUsername
+        = localStorage.getItem(STORAGE_KEYS.username)
+          || localStorage.getItem(STORAGE_KEYS.legacyUsername);
       const savedUser = localStorage.getItem(STORAGE_KEYS.user);
+      const savedRepos = localStorage.getItem(STORAGE_KEYS.legacyRepos);
 
-      if (!savedUsername)
+      if (!savedUsername) {
+        setIsRestoring(false);
         return;
+      }
 
       try {
+        const fetchConfig = await getFetchConfig();
+        const now = Date.now();
+        const isScheduleDue = !fetchConfig.lastFetchedAt
+          || now - fetchConfig.lastFetchedAt >= fetchConfig.fetchIntervalMinutes * 60 * 1000;
+
         // 恢复用户信息
         if (savedUser) {
           setUser(JSON.parse(savedUser) as GitHubUserInfo);
         }
+
+        let hasLocalRepos = false;
+
+        // 兼容旧版 localStorage 中的 star_repos
+        if (savedRepos) {
+          try {
+            const parsedRepos = JSON.parse(savedRepos) as GitHubRepo[];
+            if (Array.isArray(parsedRepos)) {
+              setRepos(parsedRepos);
+              hasLocalRepos = parsedRepos.length > 0;
+            }
+          } catch {
+            // Ignore invalid legacy repos cache
+          }
+        }
+
         setUsername(savedUsername);
+        setIsVerified(true);
 
-        // 检查缓存状态
-        const cacheInfo = await getStarsCacheInfo(savedUsername);
-        if (cacheInfo?.exists) {
-          setIsCacheStale(cacheInfo.isExpired);
-          setLastFetchedAt(cacheInfo.fetchedAt);
+        const starsCache = await getStarsCache(savedUsername);
+        if (starsCache) {
+          setRepos(starsCache.repos);
+          setLastFetchedAt(starsCache.fetchedAt);
+          setIsCacheStale(starsCache.isExpired);
+          hasLocalRepos = starsCache.repos.length > 0 || hasLocalRepos;
+        }
 
-          // 从缓存加载仓库
+        // 恢复阶段策略：
+        // - manual / on-login: 不自动请求 API
+        // - scheduled: 仅在开启后台刷新且达到间隔时自动刷新
+        const shouldScheduledRefresh
+          = fetchConfig.fetchMode === "scheduled"
+            && fetchConfig.backgroundRefresh
+            && isScheduleDue;
+
+        if (shouldScheduledRefresh) {
+          const result = await refreshStarsCache(savedUsername);
+          setRepos(result.repos);
+          setLastFetchedAt(result.fetchedAt);
+          setIsCacheStale(false);
+          localStorage.setItem(STORAGE_KEYS.legacyRepos, JSON.stringify(result.repos));
+          await saveLastFetchedAt(result.fetchedAt);
+        } else if (!hasLocalRepos) {
+          // 没有本地数据时兜底拉取一次，防止会话可用但仓库为空
           const result = await fetchStarsWithCache(savedUsername);
           setRepos(result.repos);
           setLastFetchedAt(result.fetchedAt);
-          setIsVerified(true);
+          setIsCacheStale(false);
+          localStorage.setItem(STORAGE_KEYS.legacyRepos, JSON.stringify(result.repos));
+          if (!result.fromCache) {
+            await saveLastFetchedAt(result.fetchedAt);
+          }
         }
       } catch (err) {
         console.error("Failed to restore session:", err);
-        // 清除无效的存储数据
-        localStorage.removeItem(STORAGE_KEYS.username);
-        localStorage.removeItem(STORAGE_KEYS.user);
+        // 保持已恢复的登录态，提示用户可手动刷新
+        const message = err instanceof Error ? err.message : "恢复仓库数据失败";
+        setError(message);
+      } finally {
+        setIsRestoring(false);
       }
     };
 
@@ -132,15 +216,34 @@ export function useGitHubAuth(): UseGitHubAuthReturn {
     setError(null);
 
     try {
+      const fetchConfig = await getFetchConfig();
+      const now = Date.now();
+      const isScheduleDue = !fetchConfig.lastFetchedAt
+        || now - fetchConfig.lastFetchedAt >= fetchConfig.fetchIntervalMinutes * 60 * 1000;
+
       // 获取用户信息
       const userInfo = await fetchUserInfo(trimmedUsername);
 
-      // 获取 Star 仓库（带缓存）
-      const result = await fetchStarsWithCache(trimmedUsername);
+      // 登录阶段策略：
+      // - on-login: 每次登录强制刷新
+      // - scheduled: 到间隔时刷新，否则使用缓存
+      // - manual: 使用缓存（无缓存才请求）
+      const result = fetchConfig.fetchMode === "on-login"
+        ? await refreshStarsCache(trimmedUsername)
+        : (fetchConfig.fetchMode === "scheduled" && isScheduleDue
+            ? await refreshStarsCache(trimmedUsername)
+            : await fetchStarsWithCache(trimmedUsername));
 
       // 保存到 localStorage
       localStorage.setItem(STORAGE_KEYS.username, trimmedUsername);
       localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userInfo));
+      // 写回旧 key，兼容历史逻辑
+      localStorage.setItem(STORAGE_KEYS.legacyUsername, trimmedUsername);
+      localStorage.setItem(STORAGE_KEYS.legacyRepos, JSON.stringify(result.repos));
+
+      if (!result.fromCache) {
+        await saveLastFetchedAt(result.fetchedAt);
+      }
 
       // 更新状态
       setUsername(trimmedUsername);
@@ -162,6 +265,8 @@ export function useGitHubAuth(): UseGitHubAuthReturn {
     // 清除 localStorage
     localStorage.removeItem(STORAGE_KEYS.username);
     localStorage.removeItem(STORAGE_KEYS.user);
+    localStorage.removeItem(STORAGE_KEYS.legacyUsername);
+    localStorage.removeItem(STORAGE_KEYS.legacyRepos);
 
     // 重置状态
     setUsername("");
@@ -186,6 +291,8 @@ export function useGitHubAuth(): UseGitHubAuthReturn {
       setRepos(result.repos);
       setLastFetchedAt(result.fetchedAt);
       setIsCacheStale(false);
+      localStorage.setItem(STORAGE_KEYS.legacyRepos, JSON.stringify(result.repos));
+      await saveLastFetchedAt(result.fetchedAt);
     } catch (err) {
       const message = err instanceof Error ? err.message : "刷新失败";
       setError(message);
@@ -206,6 +313,7 @@ export function useGitHubAuth(): UseGitHubAuthReturn {
     repos,
     isVerified,
     isLoading,
+    isRestoring,
     isRefreshing,
     error,
     lastFetchedAt,

@@ -10,6 +10,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { ChatOnDataCallback, UIMessage } from "ai";
 import { motion, AnimatePresence } from "motion/react";
+import { Loader2Icon } from "lucide-react";
 
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
@@ -102,6 +103,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     username,
     repos,
     isVerified,
+    isRestoring,
     isLoading: isAuthLoading,
     error: authError,
     login,
@@ -366,6 +368,17 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
   const handleAgentSelect = useCallback((id: string) => {
     setSelectedAgent(id as AgentId);
   }, []);
+
+  // Auth restoring state (avoid login flash)
+  if ((selectedAgent === "star" || selectedAgent === "master") && isRestoring) {
+    return (
+      <ChatLayout showBackground>
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </ChatLayout>
+    );
+  }
 
   // Login page for unauthenticated users
   if ((selectedAgent === "star" || selectedAgent === "master") && !isVerified) {

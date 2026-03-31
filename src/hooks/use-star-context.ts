@@ -25,6 +25,8 @@ export interface UseStarContextReturn {
   isVerified: boolean;
   /** Loading state */
   isLoading: boolean;
+  /** Whether local session is being restored */
+  isRestoring: boolean;
   /** Error message */
   error: string | null;
   /** Submit username and fetch repos */
@@ -52,6 +54,7 @@ export function useStarContext(): UseStarContextReturn {
     repos,
     isVerified,
     isLoading,
+    isRestoring,
     isRefreshing,
     error,
     lastFetchedAt,
@@ -67,6 +70,7 @@ export function useStarContext(): UseStarContextReturn {
     repos,
     isVerified,
     isLoading,
+    isRestoring,
     isRefreshing,
     error,
     lastFetchedAt,

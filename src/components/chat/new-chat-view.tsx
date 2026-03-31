@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2Icon } from "lucide-react";
 
 import { useStarContext } from "@/hooks/use-star-context";
 import { useChatHistoryStore } from "@/stores/chat-history-store";
@@ -51,6 +52,7 @@ export function NewChatView() {
   const {
     username,
     isVerified,
+    isRestoring,
     isLoading: isAuthLoading,
     error: authError,
     login,
@@ -106,6 +108,17 @@ export function NewChatView() {
       setIsCreating(false);
     }
   }, [isCreating, createNewConversation, selectedAgent, username, setPendingMessage, router, selectConversation]);
+
+  // Auth restoring state (avoid login flash)
+  if ((selectedAgent === "star" || selectedAgent === "master") && isRestoring) {
+    return (
+      <ChatLayout showBackground>
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </ChatLayout>
+    );
+  }
 
   // Login page for unauthenticated users
   if ((selectedAgent === "star" || selectedAgent === "master") && !isVerified) {
