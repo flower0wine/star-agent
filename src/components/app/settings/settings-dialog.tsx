@@ -93,7 +93,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
             <AnimatePresence mode="wait" initial={false}>
-              <motion.div key={activeSection}>
+              <motion.div key={activeSection} className="h-full min-h-0">
                 {sectionNode}
               </motion.div>
             </AnimatePresence>

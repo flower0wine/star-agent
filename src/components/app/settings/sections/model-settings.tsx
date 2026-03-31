@@ -53,8 +53,12 @@ export function ModelSettingsSection() {
   const activeApiKey = activeProvider ? providerApiKeys[activeProvider.id] || "" : "";
 
   return (
-    <SettingsSectionShell title="AI 模型" description="在一个树形列表中浏览供应商与模型，并查看详细参数。">
-      <div className="space-y-4">
+    <SettingsSectionShell
+      title="AI 模型"
+      description="在一个树形列表中浏览供应商与模型，并查看详细参数。"
+      className="flex h-full min-h-0 flex-col"
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
         {error && (
           <Alert variant="destructive">
             <AlertCircleIcon className="size-4" />
@@ -70,7 +74,7 @@ export function ModelSettingsSection() {
           </div>
         )}
 
-        <div className="grid h-[62vh] min-h-[480px] gap-4 overflow-hidden lg:grid-cols-[minmax(320px,0.95fr)_minmax(420px,1.05fr)]">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(320px,0.95fr)_minmax(420px,1.05fr)]">
           <ModelTree
             providers={providers}
             selectedProviderId={defaultProviderId}
@@ -78,7 +82,7 @@ export function ModelSettingsSection() {
             onSelectModel={setDefaultModelSelection}
           />
 
-          <ScrollArea className="h-full rounded-xl border bg-card">
+          <ScrollArea className="h-full min-h-0 rounded-xl border bg-card">
             <div className="p-4">
               {activeProvider && (
                 <ModelDetails
