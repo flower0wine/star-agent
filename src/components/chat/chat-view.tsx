@@ -11,6 +11,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { ChatOnDataCallback, UIMessage } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2Icon } from "lucide-react";
+import { chunksToMessage } from "@/lib/agents/chunk-converter";
 
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
@@ -67,6 +68,9 @@ interface SubAgentMessageSnapshot {
   task: string;
   reposCount: number;
   status: "running" | "completed" | "failed";
+  progress: number;
+  finalResult?: string;
+  error?: string;
 }
 
 const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
@@ -117,6 +121,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     processChunk,
     handleProgress,
     upsertSubAgentCard,
+    hydrateFromHistory,
     reset: resetSubAgentMessages,
     removeSubAgent,
   } = useSubAgentMessages();
@@ -199,17 +204,21 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
       setActiveSubAgentTaskId(undefined);
       return;
     }
-    if (isLoadingMessages) {
+    if (isLoadingMessages || isChatLoading) {
       return;
     }
 
     const lastMessageId = messages.at(-1)?.id;
     const nextSnapshots = new Map<string, SubAgentMessageSnapshot>();
+    const chunksByTask = new Map<string, unknown[]>();
+    const progressByTask = new Map<string, {
+      progressType: string;
+      progress?: number;
+      result?: string;
+      error?: string;
+    }>();
 
     for (const message of messages) {
-      if (message.role !== "assistant") {
-        continue;
-      }
       for (const part of message.parts) {
         if (!part || typeof part !== "object") {
           continue;
@@ -248,6 +257,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
             task,
             reposCount: inferredReposCount,
             status,
+            progress: status === "running" ? 0 : 100,
           });
           continue;
         }
@@ -267,38 +277,119 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
             task: "",
             reposCount: 0,
             status,
+            progress: status === "running" ? 0 : 100,
           });
+          continue;
+        }
+
+        if (p.type === "data-subagent" && p.data && typeof p.data === "object") {
+          const data = p.data as Record<string, unknown>;
+          const taskId = typeof data.taskId === "string" ? data.taskId : undefined;
+          const progressType = typeof data.progressType === "string" ? data.progressType : undefined;
+          if (!taskId || !progressType) {
+            continue;
+          }
+
+          if (progressType === "message-chunk" && data.chunk !== undefined) {
+            const chunks = chunksByTask.get(taskId) || [];
+            chunks.push(data.chunk);
+            chunksByTask.set(taskId, chunks);
+          } else {
+            progressByTask.set(taskId, {
+              progressType,
+              progress: typeof data.progress === "number" ? data.progress : undefined,
+              result: typeof data.result === "string" ? data.result : undefined,
+              error: typeof data.error === "string" ? data.error : undefined,
+            });
+          }
         }
       }
     }
 
-    // 同步到子 Agent 卡片状态
-    nextSnapshots.forEach((snapshot) => {
-      upsertSubAgentCard(snapshot.taskId, {
-        status: snapshot.status,
-        task: snapshot.task,
-        reposCount: snapshot.reposCount,
-        progress: snapshot.status === "running" ? 0 : 100,
+    const restoredMessages = new Map<string, UIMessage[]>();
+    chunksByTask.forEach((chunks, taskId) => {
+      const restoredMessage = chunksToMessage(chunks);
+      if (restoredMessage) {
+        restoredMessages.set(taskId, [restoredMessage]);
+      }
+    });
+
+    const hydratedCards = new Map<string, {
+      taskId: string;
+      status: "pending" | "running" | "completed" | "failed";
+      task: string;
+      reposCount: number;
+      progress: number;
+      currentOutput?: string;
+      finalResult?: string;
+      error?: string;
+    }>();
+
+    const allTaskIds = new Set<string>([
+      ...nextSnapshots.keys(),
+      ...progressByTask.keys(),
+      ...restoredMessages.keys(),
+    ]);
+
+    allTaskIds.forEach((taskId) => {
+      const snapshot = nextSnapshots.get(taskId);
+      const progressState = progressByTask.get(taskId);
+      const restoredMessage = restoredMessages.get(taskId)?.[0];
+      const restoredText = restoredMessage?.parts
+        ?.filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+        .trim();
+
+      let status: "pending" | "running" | "completed" | "failed" = snapshot?.status || "completed";
+      let progress = snapshot?.progress ?? 100;
+      let finalResult = snapshot?.finalResult;
+      let error = snapshot?.error;
+
+      if (progressState) {
+        if (progressState.progressType === "error") {
+          status = "failed";
+          progress = progressState.progress ?? progress;
+          error = progressState.error;
+        } else if (progressState.progressType === "complete") {
+          status = "completed";
+          progress = 100;
+          finalResult = progressState.result || finalResult;
+        } else if (progressState.progressType === "start") {
+          status = isChatLoading ? "running" : status;
+          progress = Math.max(0, progressState.progress ?? 0);
+        } else if (progressState.progressType === "progress") {
+          status = isChatLoading ? "running" : status;
+          progress = progressState.progress ?? progress;
+        }
+      }
+
+      if (!finalResult && restoredText) {
+        finalResult = restoredText;
+      }
+
+      hydratedCards.set(taskId, {
+        taskId,
+        status,
+        task: snapshot?.task || "",
+        reposCount: snapshot?.reposCount || 0,
+        progress,
+        finalResult,
+        error,
       });
     });
 
-    // 非流式状态下，清理不存在于当前消息中的旧任务卡片
-    if (!isChatLoading) {
-      const toRemove: string[] = [];
-      subAgentCards.forEach((_, taskId) => {
-        if (!nextSnapshots.has(taskId)) {
-          toRemove.push(taskId);
-        }
-      });
-      toRemove.forEach((taskId) => removeSubAgent(taskId));
-    }
+    hydrateFromHistory({
+      cards: hydratedCards,
+      messages: restoredMessages,
+    });
 
-    setIsSubAgentPanelOpen(nextSnapshots.size > 0);
-    if (nextSnapshots.size === 0) {
+    setIsSubAgentPanelOpen(hydratedCards.size > 0);
+    if (hydratedCards.size === 0) {
       setActiveSubAgentTaskId(undefined);
       return;
     }
-    const availableTaskIds = new Set(nextSnapshots.keys());
+    const availableTaskIds = new Set(hydratedCards.keys());
     if (!activeSubAgentTaskId || !availableTaskIds.has(activeSubAgentTaskId)) {
       setActiveSubAgentTaskId([...availableTaskIds][0]);
     }
@@ -307,9 +398,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     selectedAgent,
     isLoadingMessages,
     isChatLoading,
-    subAgentCards,
-    upsertSubAgentCard,
-    removeSubAgent,
+    hydrateFromHistory,
     activeSubAgentTaskId,
   ]);
 

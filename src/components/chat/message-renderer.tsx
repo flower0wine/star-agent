@@ -224,15 +224,30 @@ export const MessageRenderer = memo(({
                   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 )}
               </div>
+              {input.task && (
+                <div className="mt-2 rounded-md bg-background/70 px-2 py-1.5 text-xs text-foreground/90">
+                  <span className="font-medium">任务:</span> {input.task}
+                </div>
+              )}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 {typeof inferredReposCount === "number" && (
                   <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
                     {inferredReposCount} repos
                   </span>
                 )}
+                {typeof input.startIndex === "number" && typeof input.endIndex === "number" && (
+                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    range {input.startIndex}..{input.endIndex}
+                  </span>
+                )}
                 {taskId && (
                   <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
                     {taskId}
+                  </span>
+                )}
+                {output.status && (
+                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    {output.status}
                   </span>
                 )}
                 {output.__duration !== undefined && (

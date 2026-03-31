@@ -122,7 +122,17 @@ const SubAgentTab = memo(({
   onClose?: (taskId: string) => void;
 }) => {
   const isStreaming = agent.status === "running";
-  const hasMessages = messages.length > 0;
+  const fallbackMessages: UIMessage[] = agent.finalResult
+    ? [
+        {
+          id: `${agent.taskId}-restored`,
+          role: "assistant",
+          parts: [{ type: "text", text: agent.finalResult }],
+        } as UIMessage,
+      ]
+    : [];
+  const displayMessages = messages.length > 0 ? messages : fallbackMessages;
+  const hasMessages = displayMessages.length > 0;
   const progressValue = Math.max(0, Math.min(100, agent.progress ?? 0));
 
   return (
@@ -188,18 +198,20 @@ const SubAgentTab = memo(({
                   <div className="size-8 rounded-full bg-muted/50 flex items-center justify-center">
                     <BotIcon className="size-4 text-muted-foreground/50" />
                   </div>
-                  <span className="text-sm">等待任务开始...</span>
+                  <span className="text-sm">
+                    {agent.status === "completed" ? "任务已完成，但没有可恢复的流式消息" : "等待任务开始..."}
+                  </span>
                 </>
               )}
             </div>
           ) : (
             <>
-              {messages.map((message, index) => (
+              {displayMessages.map((message, index) => (
                 <MessageRenderer
                   key={message.id}
                   message={message as MessageForRenderer}
-                  isStreaming={isStreaming && index === messages.length - 1}
-                  isLastMessage={index === messages.length - 1}
+                  isStreaming={isStreaming && index === displayMessages.length - 1}
+                  isLastMessage={index === displayMessages.length - 1}
                 />
               ))}
             </>
@@ -305,30 +317,39 @@ export function SubAgentPanel({
           className="flex-1 flex flex-col min-h-0"
         >
           <div className="border-b bg-background px-2 py-2">
-            <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 scrollbar-hide">
+            <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto bg-transparent p-0 scrollbar-hide">
               {agentsList.map((agent) => (
                 <Tooltip key={agent.taskId}>
                   <TooltipTrigger asChild>
                     <TabsTrigger
                       value={agent.taskId}
                       className={cn(
-                        "h-auto min-w-[120px] max-w-[220px] items-start rounded-lg border border-transparent px-2.5 py-2 text-left text-xs whitespace-nowrap",
-                        "data-[state=active]:border-border data-[state=active]:bg-muted/35 data-[state=active]:shadow-none"
+                        "h-auto min-w-[180px] max-w-[240px] items-start rounded-xl border border-transparent px-3 py-2 text-left text-xs",
+                        "data-[state=active]:border-border data-[state=active]:bg-muted/45 data-[state=active]:shadow-none"
                       )}
                     >
-                      <div className="flex w-full items-center gap-1.5">
-                        <StatusIcon status={agent.status} size="sm" />
-                        <span className="truncate text-[11px] text-muted-foreground">
-                          {agent.taskId.slice(0, 12)}
-                        </span>
+                      <div className="flex w-full items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <StatusIcon status={agent.status} size="sm" />
+                          <span className="truncate text-[11px] text-muted-foreground">
+                            {agent.taskId.slice(0, 12)}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                          {agent.reposCount}
+                        </Badge>
                       </div>
-                      <div className="mt-1 w-full truncate font-medium">
+                      <div className="mt-1 w-full line-clamp-2 text-left font-medium leading-4">
                         {agent.task || "未命名任务"}
                       </div>
                     </TabsTrigger>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[200px]">
-                    <p className="text-xs">{agent.task || agent.taskId}</p>
+                  <TooltipContent side="bottom" className="max-w-[280px]">
+                    <div className="space-y-1">
+                      <StatusIcon status={agent.status} size="sm" />
+                      <p className="text-xs text-muted-foreground">{agent.taskId}</p>
+                      <p className="text-xs">{agent.task || "未命名任务"}</p>
+                    </div>
                   </TooltipContent>
                 </Tooltip>
               ))}

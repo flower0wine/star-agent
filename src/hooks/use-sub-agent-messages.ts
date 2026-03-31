@@ -42,6 +42,11 @@ export interface UseSubAgentMessagesReturn {
   ) => void;
   /** Upsert sub-agent card metadata */
   upsertSubAgentCard: (taskId: string, patch: Partial<SubAgentCard>) => void;
+  /** Hydrate cards/messages from persisted history */
+  hydrateFromHistory: (payload: {
+    cards: Map<string, SubAgentCard>;
+    messages: Map<string, UIMessage[]>;
+  }) => void;
   /** Reset all messages */
   reset: () => void;
   /** Remove a specific sub-agent */
@@ -266,6 +271,15 @@ export function useSubAgentMessages(
     });
   }, []);
 
+  const hydrateFromHistory = useCallback((payload: {
+    cards: Map<string, SubAgentCard>;
+    messages: Map<string, UIMessage[]>;
+  }) => {
+    const { cards, messages } = payload;
+    setSubAgentCards(cards);
+    setSubAgentMessages(messages);
+  }, []);
+
   /**
    * Reset all messages
    */
@@ -298,6 +312,7 @@ export function useSubAgentMessages(
     processChunk,
     handleProgress,
     upsertSubAgentCard,
+    hydrateFromHistory,
     reset,
     removeSubAgent,
   };
