@@ -1,8 +1,9 @@
 /**
- * Conversation Page (Dynamic Route)
+ * Chat Page (Optional Catch-All Conversation Route)
  *
- * 显示指定会话 ID 的聊天页面
- * 从 URL 参数获取 conversationId，加载会话元数据以确定 Agent 类型
+ * 统一承载：
+ * - /chat：新对话
+ * - /chat/[conversationId]：已有对话
  */
 
 "use client";
@@ -17,22 +18,23 @@ import { useChatHistoryStore } from "@/stores/chat-history-store";
 import type { AgentId } from "@/components/agents/agent-selector";
 import { ChatView } from "@/components/chat/chat-view";
 
-export default function ConversationPage() {
-  const params = useParams<{ conversationId: string }>();
+export default function ChatPage() {
+  const params = useParams<{ conversationId?: string[] }>();
   const router = useRouter();
-  const conversationId = params.conversationId;
+  const conversationId = params.conversationId?.[0];
 
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(conversationId));
   const [error, setError] = useState<string | null>(null);
 
   const { selectConversation } = useChatHistoryStore();
 
-  // 加载会话元数据
   useEffect(() => {
     if (!conversationId) {
-      setError("会话 ID 无效");
+      setConversation(null);
+      setError(null);
       setIsLoading(false);
+      selectConversation(null);
       return;
     }
 
@@ -42,15 +44,17 @@ export default function ConversationPage() {
 
       try {
         const conv = await getConversation(conversationId);
-        if (conv) {
-          setConversation(conv);
-          // 同步到 store
-          selectConversation(conversationId);
-        } else {
+        if (!conv) {
+          setConversation(null);
           setError("会话不存在");
+          return;
         }
+
+        setConversation(conv);
+        selectConversation(conversationId);
       } catch (err) {
         console.error("Failed to load conversation:", err);
+        setConversation(null);
         setError("加载会话失败");
       } finally {
         setIsLoading(false);
@@ -60,7 +64,6 @@ export default function ConversationPage() {
     void loadConversation();
   }, [conversationId, selectConversation]);
 
-  // 加载中状态
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -69,11 +72,10 @@ export default function ConversationPage() {
     );
   }
 
-  // 错误状态
-  if (error || !conversation) {
+  if (error) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <p className="text-destructive">{error || "会话不存在"}</p>
+        <p className="text-destructive">{error}</p>
         <button
           onClick={() => router.push("/chat")}
           className="text-sm text-primary underline-offset-4 hover:underline"
@@ -84,11 +86,10 @@ export default function ConversationPage() {
     );
   }
 
-  // 渲染聊天视图
   return (
     <ChatView
       conversationId={conversationId}
-      initialAgentId={conversation.agentId as AgentId}
+      initialAgentId={(conversation?.agentId as AgentId) || "star"}
     />
   );
 }

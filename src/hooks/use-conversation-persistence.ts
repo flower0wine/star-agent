@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 
-import { loadMessages, saveMessages } from "@/lib/storage";
+import { loadMessages, saveMessage, saveMessages } from "@/lib/storage";
 import { useChatHistoryStore } from "@/stores/chat-history-store";
 
 interface UseConversationPersistenceOptions<TMessage extends UIMessage = UIMessage> {
@@ -37,6 +37,24 @@ interface UseConversationPersistenceReturn {
   ensureConversation: () => Promise<string>;
 }
 
+function mergeMessagesById<TMessage extends UIMessage>(
+  loadedMessages: TMessage[],
+  currentMessages: TMessage[]
+): TMessage[] {
+  if (currentMessages.length === 0) {
+    return loadedMessages;
+  }
+
+  const loadedIds = new Set(loadedMessages.map(message => message.id));
+  const appendedMessages = currentMessages.filter(message => !loadedIds.has(message.id));
+
+  if (appendedMessages.length === 0) {
+    return loadedMessages;
+  }
+
+  return [...loadedMessages, ...appendedMessages];
+}
+
 export function useConversationPersistence<TMessage extends UIMessage = UIMessage>({
   conversationId,
   messages,
@@ -53,6 +71,7 @@ export function useConversationPersistence<TMessage extends UIMessage = UIMessag
   // 跟踪上一次的状态，用于检测流式传输结束
   const prevStatusRef = useRef(status);
   const isSavingRef = useRef(false);
+  const persistedUserMessageIdsRef = useRef<Set<string>>(new Set());
   // 使用 undefined 初始化，以区分"未初始化"和"null"
   const prevConversationIdRef = useRef<string | null | undefined>(undefined);
 
@@ -76,11 +95,16 @@ export function useConversationPersistence<TMessage extends UIMessage = UIMessag
       return;
     }
 
+    // 切换会话时先清空旧消息，避免不同会话消息混入
+    setMessages([] as TMessage[]);
+
     const loadConversationMessages = async () => {
       setIsLoadingMessages(true);
       try {
         const loadedMessages = await loadMessages(conversationId);
-        setMessages(loadedMessages as TMessage[]);
+        setMessages((prevMessages) => {
+          return mergeMessagesById(loadedMessages as TMessage[], prevMessages);
+        });
         setActiveConversationId(conversationId);
       } catch (error) {
         console.error("Failed to load messages:", error);
@@ -91,6 +115,40 @@ export function useConversationPersistence<TMessage extends UIMessage = UIMessag
 
     void loadConversationMessages();
   }, [conversationId, setMessages]);
+
+  useEffect(() => {
+    persistedUserMessageIdsRef.current.clear();
+  }, [conversationId]);
+
+  // 用户消息发送后立即持久化，避免路由变化或刷新导致首条消息丢失
+  useEffect(() => {
+    const isSending = status === "submitted" || status === "streaming";
+    if (!isSending || !activeConversationId || messages.length === 0 || isLoadingMessages) {
+      return;
+    }
+
+    const lastMessage = messages.at(-1);
+    if (!lastMessage || lastMessage.role !== "user") {
+      return;
+    }
+
+    const persistKey = `${activeConversationId}:${lastMessage.id}`;
+    if (persistedUserMessageIdsRef.current.has(persistKey)) {
+      return;
+    }
+    persistedUserMessageIdsRef.current.add(persistKey);
+
+    const persistUserMessage = async () => {
+      try {
+        await saveMessage(activeConversationId, lastMessage);
+      } catch (error) {
+        persistedUserMessageIdsRef.current.delete(persistKey);
+        console.error("Failed to save user message immediately:", error);
+      }
+    };
+
+    void persistUserMessage();
+  }, [status, activeConversationId, messages, isLoadingMessages]);
 
   // 当流式传输结束时保存消息
   useEffect(() => {

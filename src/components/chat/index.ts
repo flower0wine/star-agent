@@ -26,4 +26,3 @@ export type {
   ChatHeaderProps,
   ChatLayoutProps,
 } from "./layout";
-export { NewChatView } from "./new-chat-view";

@@ -1,8 +1,9 @@
 /**
  * Chat View Component
  *
- * 对话视图组件，用于 /chat/[conversationId] 页面展示已有对话
- * 需要传入有效的 conversationId
+ * 聊天视图组件，统一支持：
+ * - 新对话（不传 conversationId）
+ * - 已有对话（传入 conversationId）
  */
 
 "use client";
@@ -16,7 +17,6 @@ import { chunksToMessage } from "@/lib/agents/chunk-converter";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
-import { usePendingMessageStore } from "@/stores/pending-message-store";
 
 import {
   ChatLayout,
@@ -87,8 +87,8 @@ const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
 };
 
 interface ChatViewProps {
-  /** 会话 ID（必须提供有效的 ID） */
-  conversationId: string;
+  /** 会话 ID（可选，不传表示新对话） */
+  conversationId?: string;
   /** 初始 Agent ID，从会话元数据获取 */
   initialAgentId?: AgentId;
 }
@@ -151,9 +151,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     [processChunk, handleProgress]
   );
 
-  // Pending message store for cross-page message passing
-  const { consumePendingMessage } = usePendingMessageStore();
-
   // Chat hook with persistence - only active when we have a conversationId
   const {
     messages,
@@ -168,25 +165,9 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     agentId: selectedAgent,
     context: selectedAgent === "star" || selectedAgent === "master" ? { username, repos } : {},
     onData: handleData,
-    conversationId,
+    conversationId: conversationId || null,
     username,
   });
-
-  // 当加载完成后，检查是否有待发送的消息
-  const pendingMessageSentRef = useRef(false);
-  useEffect(() => {
-    if (!conversationId || isLoadingMessages || pendingMessageSentRef.current) {
-      return;
-    }
-
-    const pendingMessage = consumePendingMessage(conversationId);
-
-    if (pendingMessage) {
-      pendingMessageSentRef.current = true;
-
-      sendMessage({ text: pendingMessage.text });
-    }
-  }, [conversationId, isLoadingMessages, consumePendingMessage, sendMessage, messages.length]);
 
   const isChatLoading = status === "submitted" || status === "streaming";
 
@@ -439,12 +420,12 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
 
   const handleSubmit = useCallback(async () => {
     const text = inputRef.current.trim();
-    if (!text || isChatLoading)
+    if (!text || isChatLoading || isLoadingMessages)
       return;
 
     setInput("");
     await sendMessage({ text });
-  }, [isChatLoading, sendMessage]);
+  }, [isChatLoading, isLoadingMessages, sendMessage]);
 
   const handleInputChange = useCallback((value: string) => {
     setInput(value);
