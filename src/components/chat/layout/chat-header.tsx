@@ -15,6 +15,8 @@ import {
 export interface ChatHeaderProps {
   /** 左侧内容插槽 (如 Agent 选择器) */
   leftSlot?: ReactNode;
+  /** 右侧自定义插槽（如模型选择器） */
+  rightSlot?: ReactNode;
   /** 用户名 (可选显示) */
   username?: string;
   /** 是否显示登出按钮 */
@@ -39,6 +41,7 @@ export interface ChatHeaderProps {
  */
 export function ChatHeader({
   leftSlot,
+  rightSlot,
   username,
   showLogout,
   onLogout,
@@ -58,9 +61,9 @@ export function ChatHeader({
         className
       )}
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-between">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
         {/* 左侧区域 */}
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           {leftSlot}
 
           {/* 用户状态徽章 */}
@@ -82,7 +85,9 @@ export function ChatHeader({
         </div>
 
         {/* 右侧操作区 */}
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {rightSlot}
+
           {/* 刷新按钮 */}
           {showRefresh && (
             <Tooltip>

@@ -55,7 +55,7 @@ export async function handleMasterAgent(
   }
 
   // Get model based on provider
-  const modelInstance = getModel();
+  const modelInstance = await getModel(body.modelConfig);
 
   // Extract agent configuration
   const agentConfig: AgentConfigPayload = body.agentConfig || {};
@@ -130,3 +130,4 @@ export async function handleMasterAgent(
 
   return response;
 }
+

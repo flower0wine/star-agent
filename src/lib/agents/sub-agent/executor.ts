@@ -96,7 +96,7 @@ export async function executeSubAgentTask(
 
   // Get model instance (import dynamically to avoid circular dependency)
   const { getModel } = await import("@/app/api/chat/model");
-  const modelInstance = getModel();
+  const modelInstance = await getModel();
   console.log(`[Executor/${task.id}] Model obtained`);
 
   // Create tools
@@ -216,3 +216,4 @@ export async function executeSubAgentTask(
     throw error;
   }
 }
+

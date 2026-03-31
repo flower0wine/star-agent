@@ -8,7 +8,9 @@ export interface SettingsState {
   theme: ThemeMode;
 
   // AI Model
-  defaultModel: string;
+  defaultProviderId: string;
+  defaultModelId: string;
+  providerApiKeys: Record<string, string>;
 
   // Conversation
   historyRetentionDays: number;
@@ -20,7 +22,10 @@ export interface SettingsState {
 
 interface SettingsActions {
   setTheme: (theme: ThemeMode) => void;
-  setDefaultModel: (model: string) => void;
+  setDefaultProviderId: (providerId: string) => void;
+  setDefaultModelId: (modelId: string) => void;
+  setDefaultModelSelection: (providerId: string, modelId: string) => void;
+  setProviderApiKey: (providerId: string, apiKey: string) => void;
   setHistoryRetentionDays: (days: number) => void;
   setAutoSaveEnabled: (enabled: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -32,26 +37,87 @@ type SettingsStore = SettingsActions & SettingsState;
 
 const defaultSettings: SettingsState = {
   theme: "system",
-  defaultModel: "gpt-4o-mini",
+  defaultProviderId: "",
+  defaultModelId: "",
+  providerApiKeys: {},
   historyRetentionDays: 30,
   autoSaveEnabled: true,
   sidebarCollapsed: false,
 };
+
+interface PersistedSettingsState {
+  state?: Partial<SettingsState> & {
+    defaultModel?: string;
+  };
+}
+
+function migrateLegacyState(persistedState: unknown): SettingsState {
+  const typedState = (persistedState || {}) as PersistedSettingsState;
+  const state = typedState.state || {};
+
+  // v1 compatibility: defaultModel was a single model id (OpenAI provider only)
+  const legacyDefaultModel = typeof state.defaultModel === "string" ? state.defaultModel : "";
+
+  return {
+    ...defaultSettings,
+    ...state,
+    defaultProviderId: state.defaultProviderId || (legacyDefaultModel ? "openai" : defaultSettings.defaultProviderId),
+    defaultModelId: state.defaultModelId || legacyDefaultModel || defaultSettings.defaultModelId,
+    providerApiKeys: state.providerApiKeys || {},
+  };
+}
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       ...defaultSettings,
 
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) =>
+        set((state) => (state.theme === theme ? state : { theme })),
 
-      setDefaultModel: (defaultModel) => set({ defaultModel }),
+      setDefaultProviderId: (defaultProviderId) =>
+        set((state) => (state.defaultProviderId === defaultProviderId ? state : { defaultProviderId })),
 
-      setHistoryRetentionDays: (historyRetentionDays) => set({ historyRetentionDays }),
+      setDefaultModelId: (defaultModelId) =>
+        set((state) => (state.defaultModelId === defaultModelId ? state : { defaultModelId })),
 
-      setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
+      setDefaultModelSelection: (defaultProviderId, defaultModelId) =>
+        set((state) => {
+          if (
+            state.defaultProviderId === defaultProviderId
+            && state.defaultModelId === defaultModelId
+          ) {
+            return state;
+          }
 
-      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+          return {
+            defaultProviderId,
+            defaultModelId,
+          };
+        }),
+
+      setProviderApiKey: (providerId, apiKey) =>
+        set((state) => {
+          if (state.providerApiKeys[providerId] === apiKey) {
+            return state;
+          }
+
+          return {
+            providerApiKeys: {
+              ...state.providerApiKeys,
+              [providerId]: apiKey,
+            },
+          };
+        }),
+
+      setHistoryRetentionDays: (historyRetentionDays) =>
+        set((state) => (state.historyRetentionDays === historyRetentionDays ? state : { historyRetentionDays })),
+
+      setAutoSaveEnabled: (autoSaveEnabled) =>
+        set((state) => (state.autoSaveEnabled === autoSaveEnabled ? state : { autoSaveEnabled })),
+
+      setSidebarCollapsed: (sidebarCollapsed) =>
+        set((state) => (state.sidebarCollapsed === sidebarCollapsed ? state : { sidebarCollapsed })),
 
       toggleSidebar: () =>
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
@@ -60,17 +126,20 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "star-agent-settings",
+      version: 2,
+      migrate: (persistedState) => migrateLegacyState(persistedState),
+      partialize: (state) => ({
+        theme: state.theme,
+        defaultProviderId: state.defaultProviderId,
+        defaultModelId: state.defaultModelId,
+        providerApiKeys: state.providerApiKeys,
+        historyRetentionDays: state.historyRetentionDays,
+        autoSaveEnabled: state.autoSaveEnabled,
+        sidebarCollapsed: state.sidebarCollapsed,
+      }),
     }
   )
 );
-
-// Available models configuration
-export const AVAILABLE_MODELS = [
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
-  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" },
-  { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI" },
-  { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
-] as const;
 
 // History retention options
 export const HISTORY_RETENTION_OPTIONS = [
@@ -81,3 +150,4 @@ export const HISTORY_RETENTION_OPTIONS = [
   { value: 90, label: "90 天" },
   { value: -1, label: "永久保留" },
 ] as const;
+

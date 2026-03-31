@@ -17,6 +17,7 @@ import { chunksToMessage } from "@/lib/agents/chunk-converter";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
+import { useSettingsStore } from "@/stores/settings-store";
 
 import {
   ChatLayout,
@@ -26,6 +27,7 @@ import {
   ChatError,
   ChatMessageWrapper,
   SuggestionList,
+  ChatModelPicker,
 } from "@/components/chat";
 import type { SuggestionItem } from "@/components/chat";
 
@@ -88,9 +90,15 @@ interface ChatViewProps {
   conversationId?: string;
   /** 初始 Agent ID，从会话元数据获取 */
   initialAgentId?: AgentId;
+  /** 是否显示模型选择器 */
+  showModelPicker?: boolean;
 }
 
-export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewProps) {
+export function ChatView({
+  conversationId,
+  initialAgentId = "star",
+  showModelPicker = true,
+}: ChatViewProps) {
   // Agent selection - 使用初始值，但允许用户切换
   const [selectedAgent, setSelectedAgent] = useState<AgentId>(initialAgentId);
 
@@ -98,6 +106,9 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
   useEffect(() => {
     setSelectedAgent(initialAgentId);
   }, [initialAgentId]);
+
+  const { defaultProviderId, defaultModelId, providerApiKeys } = useSettingsStore();
+  const selectedProviderApiKey = defaultProviderId ? providerApiKeys[defaultProviderId] : undefined;
 
   // Star context (auth + repos)
   const {
@@ -164,6 +175,13 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     onData: handleData,
     conversationId: conversationId || null,
     username,
+    modelConfig: defaultProviderId && defaultModelId
+      ? {
+          providerId: defaultProviderId,
+          modelId: defaultModelId,
+          apiKey: selectedProviderApiKey,
+        }
+      : undefined,
   });
 
   const isChatLoading = status === "submitted" || status === "streaming";
@@ -532,6 +550,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
               compact
             />
           )}
+          rightSlot={showModelPicker ? <ChatModelPicker /> : undefined}
           username={username}
           showLogout
           onLogout={handleLogout}
@@ -566,3 +585,11 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     </ChatLayout>
   );
 }
+
+
+
+
+
+
+
+

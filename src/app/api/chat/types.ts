@@ -16,6 +16,12 @@ export interface AgentConfigPayload {
   enabledTools?: string[];
 }
 
+export interface ChatModelConfigPayload {
+  providerId: string;
+  modelId: string;
+  apiKey?: string;
+}
+
 export interface ChatRequestBody {
   messages: UIMessage[];
   agentId?: string;
@@ -25,6 +31,8 @@ export interface ChatRequestBody {
   };
   /** Agent 配置 */
   agentConfig?: AgentConfigPayload;
+  /** 模型配置 */
+  modelConfig?: ChatModelConfigPayload;
   // Legacy fields (for backward compatibility with star agent)
   username?: string;
   repos?: GitHubRepo[];

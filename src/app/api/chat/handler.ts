@@ -92,7 +92,7 @@ export async function handleStarAgent(
   });
 
   // Get model based on provider
-  const { model, supportsReasoning } = getModel();
+  const { model, supportsReasoning } = await getModel(body.modelConfig);
 
   // Build streamText options
   const streamOptions: Parameters<typeof streamText>[0] = {
@@ -142,3 +142,4 @@ export async function handleStarAgent(
     },
   });
 }
+

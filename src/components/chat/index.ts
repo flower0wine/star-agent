@@ -19,7 +19,7 @@ export type {
   SuggestionListProps,
 } from "./input";
 // Layout components
-export { ChatBackground, ChatHeader, ChatLayout } from "./layout";
+export { ChatBackground, ChatHeader, ChatLayout, ChatModelPicker } from "./layout";
 
 export type {
   ChatBackgroundProps,

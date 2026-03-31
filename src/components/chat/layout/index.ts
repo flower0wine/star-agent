@@ -6,3 +6,5 @@ export type { ChatHeaderProps } from "./chat-header";
 
 export { ChatLayout } from "./chat-layout";
 export type { ChatLayoutProps } from "./chat-layout";
+
+export { ChatModelPicker } from "./chat-model-picker";

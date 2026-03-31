@@ -90,6 +90,8 @@ export default function ChatPage() {
     <ChatView
       conversationId={conversationId}
       initialAgentId={(conversation?.agentId as AgentId) || "star"}
+      showModelPicker
     />
   );
 }
+
