@@ -72,7 +72,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="h-[82vh]! w-[86vw]! max-w-5xl! overflow-hidden border p-0"
+        className="h-[82vh]! w-[90vw]! max-w-6xl! overflow-hidden border p-0"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>

@@ -45,7 +45,7 @@ export function ModelTree({
   }, [expandedProviders, filteredProviders, query]);
 
   return (
-    <div className="flex min-h-[360px] flex-col rounded-xl border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
       <div className="space-y-2 border-b px-4 py-3">
         <p className="text-sm font-medium">供应商与模型</p>
         <div className="relative">

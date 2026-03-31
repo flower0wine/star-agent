@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useModelTreeCatalog } from "@/hooks/use-model-tree-catalog";
 import { useSettingsStore } from "@/stores/settings-store";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { SettingsSectionShell } from "../settings-section-shell";
 import { ModelDetails } from "./model/model-details";
@@ -69,21 +70,27 @@ export function ModelSettingsSection() {
           </div>
         )}
 
-        <ModelTree
-          providers={providers}
-          selectedProviderId={defaultProviderId}
-          selectedModelId={defaultModelId}
-          onSelectModel={setDefaultModelSelection}
-        />
-
-        {activeProvider && (
-          <ModelDetails
-            provider={activeProvider}
-            model={activeModel}
-            apiKey={activeApiKey}
-            onApiKeyChange={(value) => setProviderApiKey(activeProvider.id, value)}
+        <div className="grid h-[62vh] min-h-[480px] gap-4 overflow-hidden lg:grid-cols-[minmax(320px,0.95fr)_minmax(420px,1.05fr)]">
+          <ModelTree
+            providers={providers}
+            selectedProviderId={defaultProviderId}
+            selectedModelId={defaultModelId}
+            onSelectModel={setDefaultModelSelection}
           />
-        )}
+
+          <ScrollArea className="h-full rounded-xl border bg-card">
+            <div className="p-4">
+              {activeProvider && (
+                <ModelDetails
+                  provider={activeProvider}
+                  model={activeModel}
+                  apiKey={activeApiKey}
+                  onApiKeyChange={(value) => setProviderApiKey(activeProvider.id, value)}
+                />
+              )}
+            </div>
+          </ScrollArea>
+        </div>
       </div>
     </SettingsSectionShell>
   );
