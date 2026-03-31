@@ -15,14 +15,6 @@ import type { SubAgentCard } from "@/types/agent";
 import { ChunkConverter } from "@/lib/agents/chunk-converter";
 
 /**
- * Hook options
- */
-interface UseSubAgentMessagesOptions {
-  /** Callback when sub-agent cards need update */
-  onSubAgentUpdate?: (cards: Map<string, SubAgentCard>) => void;
-}
-
-/**
  * Hook return type
  */
 export interface UseSubAgentMessagesReturn {
@@ -36,7 +28,7 @@ export interface UseSubAgentMessagesReturn {
   handleProgress: (
     taskId: string,
     progressType: string,
-    progress?: number,
+    _progress?: number,
     result?: string,
     error?: string
   ) => void;
@@ -56,11 +48,7 @@ export interface UseSubAgentMessagesReturn {
 /**
  * Sub-agent messages hook
  */
-export function useSubAgentMessages(
-  options: UseSubAgentMessagesOptions = {}
-): UseSubAgentMessagesReturn {
-  const { onSubAgentUpdate } = options;
-
+export function useSubAgentMessages(): UseSubAgentMessagesReturn {
   const [subAgentMessages, setSubAgentMessages] = useState<Map<string, UIMessage[]>>(
     new Map()
   );
@@ -115,7 +103,6 @@ export function useSubAgentMessages(
         if ((chunk as Record<string, unknown>).type === "finish") {
           pendingCardsRef.current.set(taskId, {
             status: "completed" as const,
-            progress: 100,
           });
         }
       }
@@ -184,7 +171,7 @@ export function useSubAgentMessages(
     (
       taskId: string,
       progressType: string,
-      progress?: number,
+      _progress?: number,
       result?: string,
       error?: string
     ) => {
@@ -196,9 +183,7 @@ export function useSubAgentMessages(
           next.set(taskId, {
             taskId,
             status: "running",
-            task: existing?.task || "",
-            reposCount: existing?.reposCount || 0,
-            progress: 0,
+            task: existing?.task,
             currentOutput: existing?.currentOutput || "",
             finalResult: undefined,
             error: undefined,
@@ -212,20 +197,12 @@ export function useSubAgentMessages(
       if (progressType === "complete") {
         pendingCardsRef.current.set(taskId, {
           status: "completed",
-          progress: 100,
           finalResult: result,
         });
       } else if (progressType === "error") {
         pendingCardsRef.current.set(taskId, {
           status: "failed",
-          progress,
           error,
-        });
-      } else if (progressType === "progress") {
-        const existing = pendingCardsRef.current.get(taskId) || {};
-        pendingCardsRef.current.set(taskId, {
-          ...existing,
-          progress,
         });
       }
 
@@ -243,9 +220,7 @@ export function useSubAgentMessages(
       const nextCard: SubAgentCard = {
         taskId,
         status: existing?.status || "pending",
-        task: existing?.task || "",
-        reposCount: existing?.reposCount || 0,
-        progress: existing?.progress || 0,
+        task: existing?.task,
         currentOutput: existing?.currentOutput || "",
         finalResult: existing?.finalResult,
         error: existing?.error,
@@ -256,8 +231,6 @@ export function useSubAgentMessages(
         existing
         && existing.status === nextCard.status
         && existing.task === nextCard.task
-        && existing.reposCount === nextCard.reposCount
-        && existing.progress === nextCard.progress
         && existing.currentOutput === nextCard.currentOutput
         && existing.finalResult === nextCard.finalResult
         && existing.error === nextCard.error

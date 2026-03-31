@@ -7,13 +7,8 @@
 
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import type { SubAgentCard, SSEMessage } from "@/types/agent";
-
-/**
- * Stream message handler callback
- */
-type StreamMessageHandler = (message: SSEMessage) => void;
 
 /**
  * Hook options
@@ -55,7 +50,7 @@ export function useMultiAgentStream(options: UseMultiAgentStreamOptions = {}) {
       // Call the optional onMessage callback
       onMessage?.(message);
 
-      const { streamId, type, content, progress, result, error } = message;
+      const { streamId, type, content, result, error } = message;
 
       // Skip non-subagent messages
       if (!streamId || !streamId.startsWith("subagent-")) {
@@ -64,7 +59,6 @@ export function useMultiAgentStream(options: UseMultiAgentStreamOptions = {}) {
 
       setSubAgentCards((prev) => {
         const current = prev.get(streamId);
-        const isNew = !current;
 
         // Create or update card
         const card: SubAgentCard = current
@@ -78,7 +72,6 @@ export function useMultiAgentStream(options: UseMultiAgentStreamOptions = {}) {
                     : type === "start" || type === "progress" || type === "text"
                       ? "running"
                       : current.status,
-              progress: progress ?? current.progress,
               currentOutput: content
                 ? (current.currentOutput || "") + content
                 : current.currentOutput,
@@ -93,9 +86,6 @@ export function useMultiAgentStream(options: UseMultiAgentStreamOptions = {}) {
                   : type === "error"
                     ? "failed"
                     : "pending",
-              task: "",
-              reposCount: 0,
-              progress: progress ?? 0,
               currentOutput: content,
               finalResult: result,
               error,

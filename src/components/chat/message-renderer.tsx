@@ -98,7 +98,6 @@ export interface MessageRendererProps {
   onOpenSubAgentPanel?: (payload: {
     taskId: string;
     task?: string;
-    reposCount?: number;
   }) => void;
 }
 
@@ -106,7 +105,6 @@ interface CreateSubAgentToolOutput {
   taskId?: string;
   status?: "launched";
   message?: string;
-  reposCount?: number;
   async?: true;
   __duration?: number;
 }
@@ -197,14 +195,6 @@ export const MessageRenderer = memo(({
           const input = (part.input || {}) as CreateSubAgentToolInput;
           const taskId = output.taskId;
           const canOpen = Boolean(taskId && onOpenSubAgentPanel);
-          let inferredReposCount = output.reposCount;
-          if (
-            typeof inferredReposCount !== "number"
-            && typeof input.startIndex === "number"
-            && typeof input.endIndex === "number"
-          ) {
-            inferredReposCount = Math.max(0, input.endIndex - input.startIndex);
-          }
 
           const body = (
             <div className="w-full rounded-xl border border-border/70 bg-muted/15 px-3 py-3 text-left transition hover:border-primary/35 hover:bg-muted/25">
@@ -230,11 +220,6 @@ export const MessageRenderer = memo(({
                 </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                {typeof inferredReposCount === "number" && (
-                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
-                    {inferredReposCount} repos
-                  </span>
-                )}
                 {typeof input.startIndex === "number" && typeof input.endIndex === "number" && (
                   <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
                     range {input.startIndex}..{input.endIndex}
@@ -270,7 +255,6 @@ export const MessageRenderer = memo(({
                 onClick={() => onOpenSubAgentPanel?.({
                   taskId,
                   task: input.task,
-                  reposCount: inferredReposCount,
                 })}
               >
                 {body}

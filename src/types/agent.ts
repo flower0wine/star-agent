@@ -32,9 +32,7 @@ export interface ChatMessage {
 export interface SubAgentCard {
   taskId: string;
   status: "pending" | "running" | "completed" | "failed";
-  task: string;
-  reposCount: number;
-  progress: number;
+  task?: string;
   currentOutput?: string;
   finalResult?: string;
   error?: string;

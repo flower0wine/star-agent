@@ -60,15 +60,12 @@ interface SubAgentProgressData {
 interface OpenSubAgentPanelPayload {
   taskId: string;
   task?: string;
-  reposCount?: number;
 }
 
 interface SubAgentMessageSnapshot {
   taskId: string;
   task: string;
-  reposCount: number;
   status: "running" | "completed" | "failed";
-  progress: number;
   finalResult?: string;
   error?: string;
 }
@@ -194,7 +191,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     const chunksByTask = new Map<string, unknown[]>();
     const progressByTask = new Map<string, {
       progressType: string;
-      progress?: number;
       result?: string;
       error?: string;
     }>();
@@ -219,14 +215,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
             continue;
           }
           const task = typeof input?.task === "string" ? input.task : "";
-          const outputReposCount = typeof output?.reposCount === "number" ? output.reposCount : undefined;
-          const startIndex = typeof input?.startIndex === "number" ? input.startIndex : undefined;
-          const endIndex = typeof input?.endIndex === "number" ? input.endIndex : undefined;
-          const inferredReposCount = outputReposCount ?? (
-            typeof startIndex === "number" && typeof endIndex === "number"
-              ? Math.max(0, endIndex - startIndex)
-              : 0
-          );
           const partState = typeof p.state === "string" ? p.state : "";
           const isLastStreamingPart = isChatLoading && message.id === lastMessageId && partState !== "output-error";
           const status: SubAgentMessageSnapshot["status"] = partState === "output-error"
@@ -236,9 +224,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
           nextSnapshots.set(taskId, {
             taskId,
             task,
-            reposCount: inferredReposCount,
             status,
-            progress: status === "running" ? 0 : 100,
           });
           continue;
         }
@@ -256,9 +242,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
           nextSnapshots.set(taskId, {
             taskId,
             task: "",
-            reposCount: 0,
             status,
-            progress: status === "running" ? 0 : 100,
           });
           continue;
         }
@@ -278,7 +262,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
           } else {
             progressByTask.set(taskId, {
               progressType,
-              progress: typeof data.progress === "number" ? data.progress : undefined,
               result: typeof data.result === "string" ? data.result : undefined,
               error: typeof data.error === "string" ? data.error : undefined,
             });
@@ -299,8 +282,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
       taskId: string;
       status: "pending" | "running" | "completed" | "failed";
       task: string;
-      reposCount: number;
-      progress: number;
       currentOutput?: string;
       finalResult?: string;
       error?: string;
@@ -323,25 +304,20 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
         .trim();
 
       let status: "pending" | "running" | "completed" | "failed" = snapshot?.status || "completed";
-      let progress = snapshot?.progress ?? 100;
       let finalResult = snapshot?.finalResult;
       let error = snapshot?.error;
 
       if (progressState) {
         if (progressState.progressType === "error") {
           status = "failed";
-          progress = progressState.progress ?? progress;
           error = progressState.error;
         } else if (progressState.progressType === "complete") {
           status = "completed";
-          progress = 100;
           finalResult = progressState.result || finalResult;
         } else if (progressState.progressType === "start") {
           status = isChatLoading ? "running" : status;
-          progress = Math.max(0, progressState.progress ?? 0);
         } else if (progressState.progressType === "progress") {
           status = isChatLoading ? "running" : status;
-          progress = progressState.progress ?? progress;
         }
       }
 
@@ -353,8 +329,6 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
         taskId,
         status,
         task: snapshot?.task || "",
-        reposCount: snapshot?.reposCount || 0,
-        progress,
         finalResult,
         error,
       });
@@ -396,15 +370,14 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
   }, [removeSubAgent, activeSubAgentTaskId]);
 
   const handleOpenSubAgentPanel = useCallback((payload: OpenSubAgentPanelPayload) => {
-    const { taskId, task, reposCount } = payload;
+    const { taskId, task } = payload;
     if (!taskId)
       return;
     setIsSubAgentPanelOpen(true);
     setActiveSubAgentTaskId(taskId);
-    if (task || typeof reposCount === "number") {
+    if (task) {
       upsertSubAgentCard(taskId, {
-        ...(task ? { task } : {}),
-        ...(typeof reposCount === "number" ? { reposCount } : {}),
+        task,
       });
     }
     if (!subAgentCards.has(taskId)) {
