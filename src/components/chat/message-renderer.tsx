@@ -31,6 +31,7 @@ import { GitHubRepo } from "@/components/agents/star/github-repo";
 import {
   UserIcon,
   BotIcon,
+  ChevronRightIcon,
   CopyIcon,
   RefreshCwIcon,
   ThumbsUpIcon,
@@ -94,6 +95,26 @@ export interface MessageRendererProps {
   isStreaming?: boolean;
   isLastMessage?: boolean;
   onReload?: () => void;
+  onOpenSubAgentPanel?: (payload: {
+    taskId: string;
+    task?: string;
+    reposCount?: number;
+  }) => void;
+}
+
+interface CreateSubAgentToolOutput {
+  taskId?: string;
+  status?: "launched";
+  message?: string;
+  reposCount?: number;
+  async?: true;
+  __duration?: number;
+}
+
+interface CreateSubAgentToolInput {
+  task?: string;
+  startIndex?: number;
+  endIndex?: number;
 }
 
 /**
@@ -114,6 +135,7 @@ export const MessageRenderer = memo(({
   isStreaming = false,
   isLastMessage = false,
   onReload,
+  onOpenSubAgentPanel,
 }: MessageRendererProps) => {
   const [copied, setCopied] = useState(false);
 
@@ -160,6 +182,101 @@ export const MessageRenderer = memo(({
       }
 
       // 3. Display Repositories Tool - 专门的 UI 展示工具 (支持渐进式加载)
+      if (part.type === "tool-createSubAgent") {
+        if (part.state === "input-streaming") {
+          return (
+            <div key={`tool-createSubAgent-${i}`} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-muted-foreground text-sm">
+              <LoaderIcon className="size-4 animate-spin" />
+              正在创建子 Agent...
+            </div>
+          );
+        }
+
+        if (part.state === "output-available") {
+          const output = (part.output || {}) as CreateSubAgentToolOutput;
+          const input = (part.input || {}) as CreateSubAgentToolInput;
+          const taskId = output.taskId;
+          const canOpen = Boolean(taskId && onOpenSubAgentPanel);
+          let inferredReposCount = output.reposCount;
+          if (
+            typeof inferredReposCount !== "number"
+            && typeof input.startIndex === "number"
+            && typeof input.endIndex === "number"
+          ) {
+            inferredReposCount = Math.max(0, input.endIndex - input.startIndex);
+          }
+
+          const body = (
+            <div className="w-full rounded-xl border border-border/70 bg-muted/15 px-3 py-3 text-left transition hover:border-primary/35 hover:bg-muted/25">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <div className="mt-0.5 rounded-md bg-primary/10 p-1.5 text-primary">
+                    <BotIcon className="size-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm">子 Agent 已创建</div>
+                    <div className="mt-1 text-muted-foreground text-xs">
+                      {output.message || "任务已分配到子 Agent 处理"}
+                    </div>
+                  </div>
+                </div>
+                {canOpen && (
+                  <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                {typeof inferredReposCount === "number" && (
+                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    {inferredReposCount} repos
+                  </span>
+                )}
+                {taskId && (
+                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    {taskId}
+                  </span>
+                )}
+                {output.__duration !== undefined && (
+                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    {output.__duration < 1000
+                      ? `${output.__duration}ms`
+                      : `${(output.__duration / 1000).toFixed(1)}s`}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+
+          if (canOpen && taskId) {
+            return (
+              <button
+                key={`tool-createSubAgent-${i}`}
+                type="button"
+                className="block w-full"
+                onClick={() => onOpenSubAgentPanel?.({
+                  taskId,
+                  task: input.task,
+                  reposCount: inferredReposCount,
+                })}
+              >
+                {body}
+              </button>
+            );
+          }
+
+          return <div key={`tool-createSubAgent-${i}`}>{body}</div>;
+        }
+
+        if (part.state === "output-error") {
+          return (
+            <div key={`tool-createSubAgent-${i}`} className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
+              创建子 Agent 失败: {part.errorText}
+            </div>
+          );
+        }
+
+        return null;
+      }
+
       if (part.type === "tool-displayRepositories") {
         switch (part.state) {
           case "input-streaming":

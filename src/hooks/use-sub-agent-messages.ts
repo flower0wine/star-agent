@@ -40,6 +40,8 @@ export interface UseSubAgentMessagesReturn {
     result?: string,
     error?: string
   ) => void;
+  /** Upsert sub-agent card metadata */
+  upsertSubAgentCard: (taskId: string, patch: Partial<SubAgentCard>) => void;
   /** Reset all messages */
   reset: () => void;
   /** Remove a specific sub-agent */
@@ -185,13 +187,14 @@ export function useSubAgentMessages(
       if (progressType === "start") {
         setSubAgentCards((prev) => {
           const next = new Map(prev);
+          const existing = next.get(taskId);
           next.set(taskId, {
             taskId,
             status: "running",
-            task: "",
-            reposCount: 0,
+            task: existing?.task || "",
+            reposCount: existing?.reposCount || 0,
             progress: 0,
-            currentOutput: "",
+            currentOutput: existing?.currentOutput || "",
             finalResult: undefined,
             error: undefined,
           });
@@ -227,6 +230,43 @@ export function useSubAgentMessages(
   );
 
   /**
+   * Upsert sub-agent card metadata
+   */
+  const upsertSubAgentCard = useCallback((taskId: string, patch: Partial<SubAgentCard>) => {
+    setSubAgentCards((prev) => {
+      const existing = prev.get(taskId);
+      const nextCard: SubAgentCard = {
+        taskId,
+        status: existing?.status || "pending",
+        task: existing?.task || "",
+        reposCount: existing?.reposCount || 0,
+        progress: existing?.progress || 0,
+        currentOutput: existing?.currentOutput || "",
+        finalResult: existing?.finalResult,
+        error: existing?.error,
+        ...patch,
+      };
+
+      if (
+        existing
+        && existing.status === nextCard.status
+        && existing.task === nextCard.task
+        && existing.reposCount === nextCard.reposCount
+        && existing.progress === nextCard.progress
+        && existing.currentOutput === nextCard.currentOutput
+        && existing.finalResult === nextCard.finalResult
+        && existing.error === nextCard.error
+      ) {
+        return prev;
+      }
+
+      const next = new Map(prev);
+      next.set(taskId, nextCard);
+      return next;
+    });
+  }, []);
+
+  /**
    * Reset all messages
    */
   const reset = useCallback(() => {
@@ -257,6 +297,7 @@ export function useSubAgentMessages(
     subAgentCards,
     processChunk,
     handleProgress,
+    upsertSubAgentCard,
     reset,
     removeSubAgent,
   };

@@ -55,6 +55,19 @@ interface SubAgentProgressData {
   progress?: number;
 }
 
+interface OpenSubAgentPanelPayload {
+  taskId: string;
+  task?: string;
+  reposCount?: number;
+}
+
+interface SubAgentMessageSnapshot {
+  taskId: string;
+  task: string;
+  reposCount: number;
+  status: "running" | "completed" | "failed";
+}
+
 const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
   star: [
     { text: "展示我收藏最多 star 的仓库" },
@@ -101,12 +114,15 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
     subAgentCards,
     processChunk,
     handleProgress,
+    upsertSubAgentCard,
     reset: resetSubAgentMessages,
     removeSubAgent,
   } = useSubAgentMessages();
 
   // Chat input state
   const [input, setInput] = useState("");
+  const [isSubAgentPanelOpen, setIsSubAgentPanelOpen] = useState(false);
+  const [activeSubAgentTaskId, setActiveSubAgentTaskId] = useState<string | undefined>(undefined);
 
   // Handler for custom data parts (sub-agent progress)
   const handleData: ChatOnDataCallback<UIMessage<{ totalUsage: unknown }>> = useCallback(
@@ -167,40 +183,133 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
 
   const isChatLoading = status === "submitted" || status === "streaming";
 
-  // 跟踪已处理的 taskId，避免重复处理
-  const processedTaskIdsRef = useRef<Set<string>>(new Set());
+  // 会话切换时重置子 Agent UI 状态，避免污染到其他会话
+  useEffect(() => {
+    resetSubAgentMessages();
+    setIsSubAgentPanelOpen(false);
+    setActiveSubAgentTaskId(undefined);
+  }, [conversationId, resetSubAgentMessages]);
 
-  // Extract sub-agent task IDs from messages (for Master Agent)
+  // 根据历史消息重建子 Agent 状态（修复旧会话一直 running）
   useEffect(() => {
     if (selectedAgent !== "master") {
-      resetSubAgentMessages();
-      processedTaskIdsRef.current.clear();
+      setIsSubAgentPanelOpen(false);
+      setActiveSubAgentTaskId(undefined);
+      return;
+    }
+    if (isLoadingMessages) {
       return;
     }
 
-    const lastMessage = messages.at(-1);
-    if (!lastMessage || lastMessage.role !== "assistant")
-      return;
+    const lastMessageId = messages.at(-1)?.id;
+    const nextSnapshots = new Map<string, SubAgentMessageSnapshot>();
 
-    lastMessage.parts.forEach((part: unknown) => {
-      if (!part || typeof part !== "object")
-        return;
+    for (const message of messages) {
+      if (message.role !== "assistant") {
+        continue;
+      }
+      for (const part of message.parts) {
+        if (!part || typeof part !== "object") {
+          continue;
+        }
+        const p = part as Record<string, unknown>;
 
-      const p = part as Record<string, unknown>;
-      if (p.type === "tool-result" && p.toolCallId && p.result && typeof p.result === "object") {
-        const result = p.result as Record<string, unknown>;
-        if (
-          result.taskId
-          && typeof result.taskId === "string"
-          && result.taskId.startsWith("subagent-")
-          && !processedTaskIdsRef.current.has(result.taskId)
-        ) {
-          processedTaskIdsRef.current.add(result.taskId);
-          handleProgress(result.taskId, "start", 0);
+        // 新格式：tool-createSubAgent
+        if (p.type === "tool-createSubAgent") {
+          const output = (p.output && typeof p.output === "object")
+            ? p.output as Record<string, unknown>
+            : undefined;
+          const input = (p.input && typeof p.input === "object")
+            ? p.input as Record<string, unknown>
+            : undefined;
+          const taskId = typeof output?.taskId === "string" ? output.taskId : undefined;
+          if (!taskId) {
+            continue;
+          }
+          const task = typeof input?.task === "string" ? input.task : "";
+          const outputReposCount = typeof output?.reposCount === "number" ? output.reposCount : undefined;
+          const startIndex = typeof input?.startIndex === "number" ? input.startIndex : undefined;
+          const endIndex = typeof input?.endIndex === "number" ? input.endIndex : undefined;
+          const inferredReposCount = outputReposCount ?? (
+            typeof startIndex === "number" && typeof endIndex === "number"
+              ? Math.max(0, endIndex - startIndex)
+              : 0
+          );
+          const partState = typeof p.state === "string" ? p.state : "";
+          const isLastStreamingPart = isChatLoading && message.id === lastMessageId && partState !== "output-error";
+          const status: SubAgentMessageSnapshot["status"] = partState === "output-error"
+            ? "failed"
+            : (isLastStreamingPart ? "running" : "completed");
+
+          nextSnapshots.set(taskId, {
+            taskId,
+            task,
+            reposCount: inferredReposCount,
+            status,
+          });
+          continue;
+        }
+
+        // 兼容旧格式：tool-result
+        if (p.type === "tool-result" && p.result && typeof p.result === "object") {
+          const result = p.result as Record<string, unknown>;
+          const taskId = typeof result.taskId === "string" ? result.taskId : undefined;
+          if (!taskId || !taskId.startsWith("subagent-")) {
+            continue;
+          }
+          const status: SubAgentMessageSnapshot["status"] = isChatLoading && message.id === lastMessageId
+            ? "running"
+            : "completed";
+          nextSnapshots.set(taskId, {
+            taskId,
+            task: "",
+            reposCount: 0,
+            status,
+          });
         }
       }
+    }
+
+    // 同步到子 Agent 卡片状态
+    nextSnapshots.forEach((snapshot) => {
+      upsertSubAgentCard(snapshot.taskId, {
+        status: snapshot.status,
+        task: snapshot.task,
+        reposCount: snapshot.reposCount,
+        progress: snapshot.status === "running" ? 0 : 100,
+      });
     });
-  }, [messages.length, selectedAgent, handleProgress, resetSubAgentMessages]);
+
+    // 非流式状态下，清理不存在于当前消息中的旧任务卡片
+    if (!isChatLoading) {
+      const toRemove: string[] = [];
+      subAgentCards.forEach((_, taskId) => {
+        if (!nextSnapshots.has(taskId)) {
+          toRemove.push(taskId);
+        }
+      });
+      toRemove.forEach((taskId) => removeSubAgent(taskId));
+    }
+
+    setIsSubAgentPanelOpen(nextSnapshots.size > 0);
+    if (nextSnapshots.size === 0) {
+      setActiveSubAgentTaskId(undefined);
+      return;
+    }
+    const availableTaskIds = new Set(nextSnapshots.keys());
+    if (!activeSubAgentTaskId || !availableTaskIds.has(activeSubAgentTaskId)) {
+      setActiveSubAgentTaskId([...availableTaskIds][0]);
+    }
+  }, [
+    messages,
+    selectedAgent,
+    isLoadingMessages,
+    isChatLoading,
+    subAgentCards,
+    upsertSubAgentCard,
+    removeSubAgent,
+    activeSubAgentTaskId,
+  ]);
 
   // Input ref for submit handler
   const inputRef = useRef(input);
@@ -209,7 +318,27 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
   // Handlers
   const handleAgentClose = useCallback((taskId: string) => {
     removeSubAgent(taskId);
-  }, [removeSubAgent]);
+    if (activeSubAgentTaskId === taskId) {
+      setActiveSubAgentTaskId(undefined);
+    }
+  }, [removeSubAgent, activeSubAgentTaskId]);
+
+  const handleOpenSubAgentPanel = useCallback((payload: OpenSubAgentPanelPayload) => {
+    const { taskId, task, reposCount } = payload;
+    if (!taskId)
+      return;
+    setIsSubAgentPanelOpen(true);
+    setActiveSubAgentTaskId(taskId);
+    if (task || typeof reposCount === "number") {
+      upsertSubAgentCard(taskId, {
+        ...(task ? { task } : {}),
+        ...(typeof reposCount === "number" ? { reposCount } : {}),
+      });
+    }
+    if (!subAgentCards.has(taskId)) {
+      handleProgress(taskId, "start", 0);
+    }
+  }, [subAgentCards, handleProgress, upsertSubAgentCard]);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -297,6 +426,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
                       isStreaming={isChatLoading && index === messages.length - 1}
                       isLastMessage={index === messages.length - 1}
                       onReload={index === messages.length - 1 ? regenerate : undefined}
+                      onOpenSubAgentPanel={handleOpenSubAgentPanel}
                     />
                   </ChatMessageWrapper>
                 ))}
@@ -352,7 +482,7 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
         />
       )}
     >
-      {selectedAgent === "master" && subAgentMessages.size > 0 ? (
+      {selectedAgent === "master" && isSubAgentPanelOpen && subAgentCards.size > 0 ? (
         <ResizablePanelGroup className="flex-1">
           <ResizablePanel defaultSize="50%" minSize="35%" maxSize="65%">
             <div className="flex h-full flex-col overflow-hidden">
@@ -365,6 +495,8 @@ export function ChatView({ conversationId, initialAgentId = "star" }: ChatViewPr
             <SubAgentPanel
               agents={subAgentCards}
               messages={subAgentMessages}
+              activeTaskId={activeSubAgentTaskId}
+              onActiveTaskChange={setActiveSubAgentTaskId}
               onAgentClose={handleAgentClose}
             />
           </ResizablePanel>
