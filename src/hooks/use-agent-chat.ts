@@ -10,15 +10,16 @@
 
 import { useRef, useEffect, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage, LanguageModelUsage } from "ai";
+import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 
 import { useConversationPersistence } from "./use-conversation-persistence";
+import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 /**
  * Chat message type with usage metadata
  */
-export interface AgentChatMessage extends UIMessage<{ totalUsage: LanguageModelUsage }> {}
+export interface AgentChatMessage extends UIMessage<ChatMessageMetadata> {}
 
 export interface ChatModelConfig {
   providerId: string;

@@ -5,9 +5,10 @@
  */
 
 import type { GitHubRepo } from "@/lib/github/api";
-import type { LanguageModelUsage, UIMessage } from "ai";
+import type { UIMessage } from "ai";
+import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 
-export interface ChatMessage extends UIMessage<{ totalUsage: LanguageModelUsage }> {}
+export interface ChatMessage extends UIMessage<ChatMessageMetadata> {}
 
 export interface AgentConfigPayload {
   /** 附加系统提示词 */

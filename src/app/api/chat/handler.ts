@@ -14,6 +14,7 @@ import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
 import { getCoreTools } from "@/lib/agents/tool-registry";
+import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 /**
  * Handle Star Agent requests
@@ -27,6 +28,8 @@ export async function handleStarAgent(
   body: ChatRequestBody,
   abortSignal?: AbortSignal
 ): Promise<Response> {
+  const generationStartedAt = new Date().toISOString();
+
   // Support both legacy top-level fields and new context-based fields
   const username = body.username || body.context?.username;
   const repos = body.repos || body.context?.repos;
@@ -136,8 +139,15 @@ export async function handleStarAgent(
     messageMetadata: ({ part }) => {
       // Send total usage when generation is finished
       if (part.type === "finish") {
-        console.log(`[${requestId}] Token usage:`, part.totalUsage);
-        return { totalUsage: part.totalUsage };
+        const generationFinishedAt = new Date().toISOString();
+        const metadata = buildChatMessageMetadata({
+          totalUsage: part.totalUsage,
+          startedAt: generationStartedAt,
+          finishedAt: generationFinishedAt,
+        });
+
+        console.log(`[${requestId}] Message metrics:`, metadata);
+        return metadata;
       }
     },
   });

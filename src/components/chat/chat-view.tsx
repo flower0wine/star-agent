@@ -18,6 +18,7 @@ import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
 import { useSettingsStore } from "@/stores/settings-store";
+import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 import {
   ChatLayout,
@@ -140,7 +141,7 @@ export function ChatView({
   const [activeSubAgentTaskId, setActiveSubAgentTaskId] = useState<string | undefined>(undefined);
 
   // Handler for custom data parts (sub-agent progress)
-  const handleData: ChatOnDataCallback<UIMessage<{ totalUsage: unknown }>> = useCallback(
+  const handleData: ChatOnDataCallback<UIMessage<ChatMessageMetadata>> = useCallback(
     (dataPart) => {
       if (dataPart.type !== "data-subagent")
         return;

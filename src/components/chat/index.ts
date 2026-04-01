@@ -20,9 +20,11 @@ export type {
 } from "./input";
 // Layout components
 export { ChatBackground, ChatHeader, ChatLayout, ChatModelPicker } from "./layout";
-
 export type {
   ChatBackgroundProps,
   ChatHeaderProps,
   ChatLayoutProps,
 } from "./layout";
+// Metadata components
+export { ChatMessageMetrics } from "./metadata";
+export type { ChatMessageMetadata, ChatMessageTiming } from "./metadata";

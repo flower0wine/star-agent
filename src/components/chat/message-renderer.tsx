@@ -5,7 +5,7 @@ import {
   isStaticToolUIPart,
   isTextUIPart,
 } from "ai";
-import type { UIMessage, ToolUIPart, LanguageModelUsage } from "ai";
+import type { UIMessage } from "ai";
 
 import {
   Message,
@@ -38,10 +38,11 @@ import {
   ThumbsDownIcon,
   CheckIcon,
   LoaderIcon,
-  ZapIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useCallback, useMemo, memo } from "react";
+import { ChatMessageMetrics } from "./metadata";
+import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 // Helper type for tool output with repos
 interface RepoToolOutput {
@@ -88,7 +89,7 @@ interface RepoToolOutput {
 }
 
 // Custom message type with usage metadata
-type ChatMessageWithUsage = UIMessage<{ totalUsage?: LanguageModelUsage }>;
+type ChatMessageWithUsage = UIMessage<ChatMessageMetadata>;
 
 export interface MessageRendererProps {
   message: ChatMessageWithUsage;
@@ -389,18 +390,12 @@ export const MessageRenderer = memo(({
         <div className="space-y-3">{renderParts}</div>
       </MessageContent>
 
-      {/* Token usage display */}
-      {message.role === "assistant" && !isStreaming && message.metadata?.totalUsage && (
-        <>
-          <div className="mt-2 flex items-center gap-3 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
-            <ZapIcon className="size-3.5" />
-            <span>Tokens:</span>
-            <span className="font-medium">{message.metadata.totalUsage.totalTokens}</span>
-            <span className="text-muted-foreground/70">
-              (in: {message.metadata.totalUsage.inputTokens || 0}, out: {message.metadata.totalUsage.outputTokens || 0})
-            </span>
-          </div>
-        </>
+      {/* Message usage and timing */}
+      {message.role === "assistant" && !isStreaming && (
+        <ChatMessageMetrics
+          usage={message.metadata?.totalUsage}
+          timing={message.metadata?.timing}
+        />
       )}
 
       {/* Message toolbar for assistant messages */}

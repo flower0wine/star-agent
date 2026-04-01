@@ -17,7 +17,7 @@ import type { streamText as StreamTextType, UIMessage } from "ai";
 import type { SubAgentProgress } from "./sub-agent/types";
 import { getSubAgentManager } from "./sub-agent/manager";
 import { AgentOrchestrator, resumeMasterAgent } from "./orchestrator";
-import { ChunkConverter } from "./chunk-converter";
+import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 /**
  * Master stream configuration for resumption
@@ -103,6 +103,7 @@ export async function createMultiStreamResponse(
         // Execution cycle loop
         while (shouldContinue && orchestrator.getCycleNumber() <= 10) {
           const cycleNumber = orchestrator.getCycleNumber();
+          const cycleStartedAt = new Date().toISOString();
           console.log(
             `[MultiStream/${requestId}] ===== Cycle ${cycleNumber} Start =====`
           );
@@ -119,7 +120,23 @@ export async function createMultiStreamResponse(
           };
 
           // Stream and collect master output
-          for await (const chunk of currentStream.toUIMessageStream()) {
+          for await (const chunk of currentStream.toUIMessageStream({
+            messageMetadata: ({ part }) => {
+              if (part.type !== "finish") {
+                return undefined;
+              }
+
+              const cycleFinishedAt = new Date().toISOString();
+              const metadata = buildChatMessageMetadata({
+                totalUsage: part.totalUsage,
+                startedAt: cycleStartedAt,
+                finishedAt: cycleFinishedAt,
+              });
+
+              console.log(`[MultiStream/${requestId}] Cycle ${cycleNumber} metrics:`, metadata);
+              return metadata;
+            },
+          })) {
             // Write master stream chunks directly
             writer.write(chunk);
 

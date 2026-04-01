@@ -45,6 +45,7 @@ function chatMessageToUIMessage(message: ChatMessage): UIMessage {
     id: message.id,
     role: message.role as UIMessage["role"],
     parts: message.parts as UIMessage["parts"],
+    metadata: message.metadata,
   };
 }
 
