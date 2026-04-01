@@ -118,45 +118,20 @@ export class AgentOrchestrator {
       return [];
     }
 
-    const startTime = Date.now();
-    const timeout = this.config.subAgentTimeout;
+    const pendingTaskIds = this.getPendingTaskIdsForCurrentCycle();
+    const completionResult = await this.waitForPendingTasks(
+      pendingTaskIds,
+      this.config.subAgentTimeout
+    );
 
-    // Poll for completion
-    while (Date.now() - startTime < timeout) {
-      // Check if all sub-agents are completed
-      if (this.cycleManager.areAllSubAgentsCompleted()) {
-        this.cycleManager.completeSubAgents();
-        const results = this.cycleManager.getCurrentCycleResults();
-
-        console.log(
-          `[Orchestrator/${this.config.requestId}] All sub-agents completed (Cycle ${cycleNumber})`
-        );
-        this.emit("subagents-complete", { results });
-
-        return results;
-      }
-
-      // Collect results from completed sub-agents
-      const state = this.cycleManager.getState();
-      for (const taskId of state.currentCycleSubAgents) {
-        // Skip if already collected
-        if (state.subAgentResults.has(taskId)) {
-          continue;
-        }
-
-        // Check if task is completed
-        const task = this.subAgentManager.getTask(taskId);
-        if (task && (task.status === "completed" || task.status === "failed")) {
-          const result = this.createSubAgentResult(task);
-          this.cycleManager.addSubAgentResult(result);
-          console.log(
-            `[Orchestrator/${this.config.requestId}] Collected result from ${taskId}: ${task.status}`
-          );
-        }
-      }
-
-      // Wait before next check
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    if (completionResult === "completed" && this.cycleManager.areAllSubAgentsCompleted()) {
+      this.cycleManager.completeSubAgents();
+      const results = this.cycleManager.getCurrentCycleResults();
+      console.log(
+        `[Orchestrator/${this.config.requestId}] All sub-agents completed (Cycle ${cycleNumber})`
+      );
+      this.emit("subagents-complete", { results });
+      return results;
     }
 
     // Timeout reached
@@ -164,8 +139,62 @@ export class AgentOrchestrator {
       `[Orchestrator/${this.config.requestId}] Sub-agent wait timeout (Cycle ${cycleNumber})`
     );
 
+    for (const taskId of pendingTaskIds) {
+      this.collectResultIfTerminal(this.subAgentManager.getTask(taskId));
+    }
+
     // Return whatever results we have
     return this.cycleManager.getCurrentCycleResults();
+  }
+
+  private getPendingTaskIdsForCurrentCycle(): string[] {
+    const state = this.cycleManager.getState();
+    return [...state.currentCycleSubAgents].filter(taskId => !state.subAgentResults.has(taskId));
+  }
+
+  private collectResultIfTerminal(task: SubAgentTask | undefined): void {
+    if (!task) {
+      return;
+    }
+    if (task.status !== "completed" && task.status !== "failed") {
+      return;
+    }
+
+    const current = this.cycleManager.getState();
+    if (current.subAgentResults.has(task.id)) {
+      return;
+    }
+
+    const result = this.createSubAgentResult(task);
+    this.cycleManager.addSubAgentResult(result);
+    console.log(
+      `[Orchestrator/${this.config.requestId}] Collected result from ${task.id}: ${task.status}`
+    );
+  }
+
+  private async waitForPendingTasks(
+    taskIds: string[],
+    timeoutMs: number
+  ): Promise<"completed" | "timeout"> {
+    const completionPromises = taskIds.map(async (taskId) => {
+      const task = await this.subAgentManager.waitForTaskCompletion(taskId);
+      this.collectResultIfTerminal(task);
+    });
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<"timeout">((resolve) => {
+      timeoutHandle = setTimeout(resolve, timeoutMs, "timeout");
+    });
+
+    const outcome = await Promise.race([
+      Promise.all(completionPromises).then(() => "completed" as const),
+      timeoutPromise,
+    ]);
+
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    return outcome;
   }
 
   /**
@@ -259,10 +288,6 @@ export class AgentOrchestrator {
 
       sections.push("\n---\n");
     });
-
-    sections.push(
-      "\n请根据以上子 Agent 的执行结果，为用户提供汇总分析和最终答案。"
-    );
 
     return sections.join("\n");
   }

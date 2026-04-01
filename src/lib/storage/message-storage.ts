@@ -80,33 +80,36 @@ export async function saveMessages(
   messages: UIMessage[]
 ): Promise<void> {
   const db = await getDB();
+  const now = Date.now();
 
-  // 先删除该对话的所有现有消息
-  const existingMessages = await db.getAllFromIndex(
-    "messages",
-    "by-conversation",
-    conversationId
-  );
-  const deleteTx = db.transaction("messages", "readwrite");
-  for (const msg of existingMessages) {
-    await deleteTx.store.delete(msg.id);
-  }
-  await deleteTx.done;
+  // 增量同步：删除缺失项 + upsert 当前项，避免全量清空重写导致卡顿
+  const existingMessages = await db.getAllFromIndex("messages", "by-conversation", conversationId);
+  const existingById = new Map(existingMessages.map(message => [message.id, message]));
+  const nextIds = new Set(messages.map(message => message.id));
 
-  // 保存新消息
-  const saveTx = db.transaction("messages", "readwrite");
-  for (const message of messages) {
-    const chatMessage = uiMessageToChatMessage(message, conversationId);
-    await saveTx.store.put(chatMessage);
+  const tx = db.transaction("messages", "readwrite");
+
+  for (const existing of existingMessages) {
+    if (!nextIds.has(existing.id)) {
+      await tx.store.delete(existing.id);
+    }
   }
-  await saveTx.done;
+
+  for (const [index, message] of messages.entries()) {
+    const existing = existingById.get(message.id);
+    const createdAt = existing?.createdAt ?? (now + index);
+    const chatMessage = uiMessageToChatMessage(message, conversationId, createdAt);
+    await tx.store.put(chatMessage);
+  }
+
+  await tx.done;
 
   // 更新对话元数据
   const conversation = await db.get("conversations", conversationId);
   if (conversation) {
     await db.put("conversations", {
       ...conversation,
-      updatedAt: Date.now(),
+      updatedAt: now,
       messageCount: messages.length,
     });
   }

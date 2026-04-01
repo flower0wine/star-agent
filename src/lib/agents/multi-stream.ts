@@ -16,7 +16,15 @@ import type { streamText as StreamTextType, UIMessage } from "ai";
 
 import type { SubAgentProgress } from "./sub-agent/types";
 import { getSubAgentManager } from "./sub-agent/manager";
-import { AgentOrchestrator, resumeMasterAgent } from "./orchestrator";
+import {
+  AgentOrchestrator,
+  createResumptionMessage,
+  resumeMasterAgent,
+} from "./orchestrator";
+import {
+  createConverterState,
+  processChunk as processAssistantChunk,
+} from "@/lib/agents/chunk-converter";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 /**
@@ -28,6 +36,8 @@ interface MasterStreamConfig {
   system: Parameters<typeof StreamTextType>[0]["system"];
   initialMessages: UIMessage[];
 }
+
+const MAX_ORCHESTRATION_CYCLES = 10;
 
 /**
  * Create multi-stream response with orchestration
@@ -45,7 +55,7 @@ export async function createMultiStreamResponse(
   // Create orchestrator
   const orchestrator = new AgentOrchestrator({
     requestId,
-    maxCycles: 10,
+    maxCycles: MAX_ORCHESTRATION_CYCLES,
     subAgentTimeout: 180000, // 3 minutes
   });
 
@@ -55,13 +65,13 @@ export async function createMultiStreamResponse(
   // Create the unified stream using AI SDK's createUIMessageStream
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      // Send initial message
-      writer.write({
-        type: "start",
-      });
-
       // Subscribe to sub-agent progress
       const progressHandler = (progress: SubAgentProgress) => {
+        // Ignore tasks from other requests/sessions to prevent cross-stream blocking.
+        if (!subManager.isTaskInSession(progress.taskId, requestId)) {
+          return;
+        }
+
         // Register sub-agent with orchestrator
         if (progress.type === "start") {
           orchestrator.registerSubAgent(progress.taskId);
@@ -98,10 +108,9 @@ export async function createMultiStreamResponse(
 
       try {
         let currentStream = masterStream;
-        let shouldContinue = true;
 
-        // Execution cycle loop
-        while (shouldContinue && orchestrator.getCycleNumber() <= 10) {
+        // Execution cycle loop (bounded)
+        for (let cycleAttempt = 0; cycleAttempt < MAX_ORCHESTRATION_CYCLES; cycleAttempt++) {
           const cycleNumber = orchestrator.getCycleNumber();
           const cycleStartedAt = new Date().toISOString();
           console.log(
@@ -113,11 +122,12 @@ export async function createMultiStreamResponse(
             `[MultiStream/${requestId}] Phase 1: Streaming master output`
           );
 
-          const assistantMessage: UIMessage = {
+          let assistantMessage: UIMessage = {
             id: `assistant-cycle-${cycleNumber}-${Date.now()}`,
             role: "assistant",
             parts: [],
           };
+          const converterState = createConverterState();
 
           // Stream and collect master output
           for await (const chunk of currentStream.toUIMessageStream({
@@ -140,8 +150,10 @@ export async function createMultiStreamResponse(
             // Write master stream chunks directly
             writer.write(chunk);
 
-            // Collect chunks for message history (simplified)
-            // In production, you'd want more sophisticated message accumulation
+            const conversion = processAssistantChunk(chunk, converterState);
+            if (conversion.isFinalized && conversion.message) {
+              assistantMessage = conversion.message;
+            }
           }
 
           // Add assistant message to history
@@ -170,7 +182,6 @@ export async function createMultiStreamResponse(
             console.log(
               `[MultiStream/${requestId}] No sub-agents created, ending cycles`
             );
-            shouldContinue = false;
             break;
           }
 
@@ -178,7 +189,6 @@ export async function createMultiStreamResponse(
             console.log(
               `[MultiStream/${requestId}] No new cycle needed, ending`
             );
-            shouldContinue = false;
             break;
           }
 
@@ -199,7 +209,6 @@ export async function createMultiStreamResponse(
               },
             });
 
-            shouldContinue = false;
             break;
           }
 
@@ -209,6 +218,12 @@ export async function createMultiStreamResponse(
           );
 
           orchestrator.startNewCycle();
+
+          // Keep accumulated history consistent across cycles.
+          // resumeMasterAgent appends this message internally for the next stream,
+          // but we also need it in accumulatedMessages for subsequent resumes.
+          const resumptionMessage = createResumptionMessage(subAgentResults, cycleNumber);
+          accumulatedMessages.push(resumptionMessage);
 
           // Resume master agent with sub-agent results
           currentStream = await resumeMasterAgent({

@@ -13,6 +13,12 @@ import type {
 import { executeSubAgentTask } from "./executor";
 import { ChunkConverter } from "../chunk-converter";
 
+interface TaskCompletionSignal {
+  promise: Promise<void>;
+  resolve: () => void;
+  settled: boolean;
+}
+
 /**
  * Sub-Agent Manager
  *
@@ -24,6 +30,12 @@ import { ChunkConverter } from "../chunk-converter";
  */
 export class SubAgentManager {
   private static instance: SubAgentManager;
+
+  /**
+   * Task completion signal for event-driven orchestration wait.
+   * A task resolves once it reaches a terminal state (completed/failed).
+   */
+  private completionSignals = new Map<string, TaskCompletionSignal>();
 
   /** Task storage */
   private tasks = new Map<string, SubAgentTask>();
@@ -73,19 +85,10 @@ export class SubAgentManager {
     };
 
     this.tasks.set(id, task);
+    this.createCompletionSignal(id);
 
     // Track session-task relationship
-    if (!this.sessionTasks.has(sessionId)) {
-      this.sessionTasks.set(sessionId, new Set());
-    }
-    this.sessionTasks.get(sessionId)!.add(id);
-
-    // Notify start
-    this.notify({
-      taskId: id,
-      type: "start",
-      progress: 0,
-    });
+    this.ensureSessionTaskSet(sessionId).add(id);
 
     // Execute asynchronously in background
     this.executeTask(task);
@@ -146,7 +149,66 @@ export class SubAgentManager {
       });
     } finally {
       this.abortControllers.delete(task.id);
+      this.resolveCompletionSignal(task.id);
     }
+  }
+
+  private createCompletionSignal(taskId: string): void {
+    if (this.completionSignals.has(taskId)) {
+      return;
+    }
+
+    let resolveFn: (() => void) | null = null;
+    const signal: TaskCompletionSignal = {
+      settled: false,
+      promise: new Promise<void>((resolve) => {
+        resolveFn = () => {
+          if (signal.settled) {
+            return;
+          }
+          signal.settled = true;
+          resolve();
+        };
+      }),
+      resolve: () => {
+        resolveFn?.();
+      },
+    };
+
+    this.completionSignals.set(taskId, signal);
+  }
+
+  private ensureSessionTaskSet(sessionId: string): Set<string> {
+    const existing = this.sessionTasks.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+    const created = new Set<string>();
+    this.sessionTasks.set(sessionId, created);
+    return created;
+  }
+
+  private resolveCompletionSignal(taskId: string): void {
+    const signal = this.completionSignals.get(taskId);
+    signal?.resolve();
+  }
+
+  /**
+   * Wait until a task reaches terminal state (completed/failed).
+   */
+  async waitForTaskCompletion(taskId: string): Promise<SubAgentTask | undefined> {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      return undefined;
+    }
+    if (task.status === "completed" || task.status === "failed") {
+      return task;
+    }
+
+    this.createCompletionSignal(taskId);
+    const signal = this.completionSignals.get(taskId);
+    await signal?.promise;
+    return this.tasks.get(taskId);
   }
 
   /**
@@ -238,6 +300,17 @@ export class SubAgentManager {
   }
 
   /**
+   * Check whether a task belongs to a specific session
+   */
+  isTaskInSession(taskId: string, sessionId: string): boolean {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      return false;
+    }
+    return task.parentId === sessionId;
+  }
+
+  /**
    * Abort task
    */
   abortTask(id: string): void {
@@ -250,6 +323,7 @@ export class SubAgentManager {
       task.status = "failed";
       task.error = "Aborted by user";
     }
+    this.resolveCompletionSignal(id);
   }
 
   /**
@@ -275,6 +349,7 @@ export class SubAgentManager {
         && (task.completedAt || task.createdAt) < cutoff
       ) {
         this.tasks.delete(id);
+        this.completionSignals.delete(id);
 
         // Clean up session mapping
         this.sessionTasks.forEach((taskIds) => {
