@@ -5,6 +5,7 @@
  */
 
 import { ToolLoopAgent, createAgentUIStream } from "ai";
+import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 import type { GitHubRepo } from "@/lib/github/api";
 import type { ModelInstance } from "@/app/api/chat/model";
 import type { SubAgentTask, SubAgentProgress } from "./types";
@@ -138,11 +139,24 @@ export async function executeSubAgentTask(
     console.log(`[Executor/${task.id}] UI messages (parts format):`, JSON.stringify(uiMessages));
 
     // Use createAgentUIStream for streaming execution
+    const generationStartedAt = new Date().toISOString();
     const stream = await createAgentUIStream({
       agent: subAgent,
       uiMessages,
       abortSignal,
       timeout: timeoutMs,
+      messageMetadata: ({ part }) => {
+        if (part.type !== "finish") {
+          return undefined;
+        }
+
+        const generationFinishedAt = new Date().toISOString();
+        return buildChatMessageMetadata({
+          totalUsage: part.totalUsage,
+          startedAt: generationStartedAt,
+          finishedAt: generationFinishedAt,
+        });
+      },
     });
     console.log(`[Executor/${task.id}] Agent UI stream created, type:`, typeof stream);
 

@@ -9,20 +9,23 @@ import {
   MessageLoadingIndicator,
   MessageRenderer,
 } from "@/components/chat/message-renderer";
-import { BotIcon, XIcon } from "lucide-react";
+import { BotIcon, XIcon, ZapIcon } from "lucide-react";
 import { SubAgentStatusBadge } from "./sub-agent-status";
+import { formatTokens } from "@/lib/chat/usage-utils";
 
 type MessageForRenderer = UIMessage & { metadata?: { totalUsage?: LanguageModelUsage } };
 
 interface SubAgentThreadViewProps {
   agent?: SubAgentCard;
   messages: UIMessage[];
+  usage?: LanguageModelUsage;
   onClose?: (taskId: string) => void;
 }
 
 export const SubAgentThreadView = memo(({
   agent,
   messages,
+  usage,
   onClose,
 }: SubAgentThreadViewProps) => {
   if (!agent) {
@@ -44,6 +47,7 @@ export const SubAgentThreadView = memo(({
       ]
     : [];
   const displayMessages = messages.length > 0 ? messages : fallbackMessages;
+  const totalTokens = usage?.totalTokens || 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -52,6 +56,12 @@ export const SubAgentThreadView = memo(({
           <BotIcon className="size-4 text-muted-foreground" />
           <span className="truncate font-mono text-sm">{agent.taskId}</span>
           <SubAgentStatusBadge status={agent.status} />
+          {totalTokens > 0 && (
+            <span className="flex items-center gap-1 rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <ZapIcon className="size-3" />
+              {formatTokens(totalTokens)}
+            </span>
+          )}
         </div>
         {onClose && agent.status !== "running" && (
           <Button
@@ -100,3 +110,4 @@ export const SubAgentThreadView = memo(({
     </div>
   );
 });
+

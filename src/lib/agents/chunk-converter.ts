@@ -274,6 +274,27 @@ function createStreamingMessage(state: ChunkConverterState): UIMessage | null {
   } as UIMessage;
 }
 
+function extractUsageFromFinishChunk(chunkObj: Record<string, unknown>): LanguageModelUsage | undefined {
+  const metadata = chunkObj.messageMetadata;
+  if (metadata && typeof metadata === "object") {
+    const fromMetadata = (metadata as Record<string, unknown>).totalUsage;
+    if (fromMetadata && typeof fromMetadata === "object") {
+      return fromMetadata as LanguageModelUsage;
+    }
+  }
+
+  const totalUsage = chunkObj.totalUsage;
+  if (totalUsage && typeof totalUsage === "object") {
+    return totalUsage as LanguageModelUsage;
+  }
+
+  const usage = chunkObj.usage;
+  if (usage && typeof usage === "object") {
+    return usage as LanguageModelUsage;
+  }
+
+  return undefined;
+}
 /**
  * Process a single chunk and update the converter state
  *
@@ -424,10 +445,9 @@ export function processChunk(
 
     case "finish": {
       state.finishReason = chunkObj.finishReason as string;
-
-      if (chunkObj.messageMetadata) {
-        const metadata = chunkObj.messageMetadata as Record<string, unknown>;
-        state.totalUsage = metadata.totalUsage as LanguageModelUsage;
+      const finishUsage = extractUsageFromFinishChunk(chunkObj);
+      if (finishUsage) {
+        state.totalUsage = finishUsage;
       }
 
       const message: UIMessage = {
@@ -571,3 +591,4 @@ export function chunksToMessage(chunks: unknown[]): UIMessage | null {
 
   return null;
 }
+

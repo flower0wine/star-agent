@@ -568,6 +568,7 @@ export function ChatView({
             <SubAgentPanel
               agents={subAgentCards}
               messages={subAgentMessages}
+              masterMessages={messages}
               activeTaskId={activeSubAgentTaskId}
               onActiveTaskChange={setActiveSubAgentTaskId}
               onAgentClose={handleAgentClose}
@@ -583,11 +584,4 @@ export function ChatView({
     </ChatLayout>
   );
 }
-
-
-
-
-
-
-
 
