@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { ChatOnDataCallback, UIMessage } from "ai";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2Icon } from "lucide-react";
 import {
@@ -21,6 +22,7 @@ import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useChatHistoryStore } from "@/stores/chat-history-store";
 import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 import {
@@ -69,6 +71,13 @@ interface OpenSubAgentPanelPayload {
   task?: string;
 }
 
+interface PendingRouteMessagePayload {
+  conversationId: string;
+  text: string;
+}
+
+const PendingRouteMessageStorageKey = "star-agent:pending-route-message";
+
 const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
   star: [
     { text: "展示我收藏最多 star 的仓库" },
@@ -96,8 +105,12 @@ export function ChatView({
   initialAgentId = "star",
   showModelPicker = true,
 }: ChatViewProps) {
+  const router = useRouter();
+  const { createNewConversation } = useChatHistoryStore();
+
   // Agent selection - 使用初始值，但允许用户切换
   const [selectedAgent, setSelectedAgent] = useState<AgentId>(initialAgentId);
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
 
   // 当 initialAgentId 变化时同步（例如从 URL 加载新会话）
   useEffect(() => {
@@ -136,6 +149,8 @@ export function ChatView({
   const [isSubAgentPanelOpen, setIsSubAgentPanelOpen] = useState(false);
   const [activeSubAgentTaskId, setActiveSubAgentTaskId] = useState<string | undefined>(undefined);
   const subAgentCardsRef = useRef(subAgentCards);
+  const isCreatingConversationRef = useRef(false);
+  const autoSentConversationIdRef = useRef<string | null>(null);
 
   // Handler for custom data parts (sub-agent progress)
   const handleData: ChatOnDataCallback<UIMessage<ChatMessageMetadata>> = useCallback(
@@ -192,6 +207,7 @@ export function ChatView({
   });
 
   const isChatLoading = status === "submitted" || status === "streaming";
+  const isInputBusy = isChatLoading || isCreatingConversation;
   const subAgentHistorySignature = useMemo(
     () => createSubAgentHistorySignature(messages),
     [messages]
@@ -260,6 +276,60 @@ export function ChatView({
   inputRef.current = input;
 
   // Handlers
+  useEffect(() => {
+    if (!conversationId || isLoadingMessages || isInputBusy || status !== "ready") {
+      return;
+    }
+
+    if ((selectedAgent === "star" || selectedAgent === "master") && (isRestoring || !isVerified)) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const rawPayload = window.sessionStorage.getItem(PendingRouteMessageStorageKey);
+    if (!rawPayload) {
+      return;
+    }
+
+    let payload: PendingRouteMessagePayload | null = null;
+    try {
+      payload = JSON.parse(rawPayload) as PendingRouteMessagePayload;
+    } catch (err) {
+      console.error("Failed to parse pending route message:", err);
+      window.sessionStorage.removeItem(PendingRouteMessageStorageKey);
+      return;
+    }
+
+    if (!payload?.text || payload.conversationId !== conversationId) {
+      return;
+    }
+
+    if (autoSentConversationIdRef.current === conversationId) {
+      return;
+    }
+
+    autoSentConversationIdRef.current = conversationId;
+    window.sessionStorage.removeItem(PendingRouteMessageStorageKey);
+
+    void sendMessage({ text: payload.text.trim() }).catch((err) => {
+      console.error("Failed to send pending route message:", err);
+      autoSentConversationIdRef.current = null;
+      window.sessionStorage.setItem(PendingRouteMessageStorageKey, JSON.stringify(payload));
+    });
+  }, [
+    conversationId,
+    isLoadingMessages,
+    isInputBusy,
+    status,
+    selectedAgent,
+    isRestoring,
+    isVerified,
+    sendMessage,
+  ]);
+
   const handleAgentClose = useCallback((taskId: string) => {
     removeSubAgent(taskId);
     if (activeSubAgentTaskId === taskId) {
@@ -291,12 +361,50 @@ export function ChatView({
 
   const handleSubmit = useCallback(async () => {
     const text = inputRef.current.trim();
-    if (!text || isChatLoading || isLoadingMessages)
+    if (!text || isInputBusy || isLoadingMessages)
       return;
 
     setInput("");
+
+    if (!conversationId) {
+      if (isCreatingConversationRef.current) {
+        return;
+      }
+
+      isCreatingConversationRef.current = true;
+      setIsCreatingConversation(true);
+
+      try {
+        const conversation = await createNewConversation(selectedAgent, username || null);
+        if (typeof window !== "undefined") {
+          const payload: PendingRouteMessagePayload = {
+            conversationId: conversation.id,
+            text,
+          };
+          window.sessionStorage.setItem(PendingRouteMessageStorageKey, JSON.stringify(payload));
+        }
+        router.push(`/chat/${conversation.id}`);
+      } catch (err) {
+        console.error("Failed to create conversation before sending:", err);
+        setInput(text);
+      } finally {
+        isCreatingConversationRef.current = false;
+        setIsCreatingConversation(false);
+      }
+      return;
+    }
+
     await sendMessage({ text });
-  }, [isChatLoading, isLoadingMessages, sendMessage]);
+  }, [
+    isInputBusy,
+    isLoadingMessages,
+    conversationId,
+    createNewConversation,
+    selectedAgent,
+    username,
+    router,
+    sendMessage,
+  ]);
 
   const handleInputChange = useCallback((value: string) => {
     setInput(value);
@@ -319,7 +427,7 @@ export function ChatView({
       onChange={handleInputChange}
       onSubmit={handleSubmit}
       onStop={stop}
-      isLoading={isChatLoading}
+      isLoading={isInputBusy}
       placeholder={selectedAgent === "star" ? "询问关于你的仓库..." : "输入消息..."}
     />
   );
