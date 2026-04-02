@@ -276,7 +276,7 @@ export class AgentOrchestrator {
         result.messages.forEach((msg) => {
           msg.parts.forEach((part) => {
             if (typeof part === "object" && part !== null && "text" in part) {
-              sections.push(`${(part as { text: string }).text}\n`);
+              sections.push(part.text);
             }
           });
         });

@@ -12,7 +12,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from "ai";
-import type { streamText as StreamTextType, UIMessage } from "ai";
+import type { ModelMessage, streamText as StreamTextType } from "ai";
 
 import type { SubAgentProgress } from "./sub-agent/types";
 import { getSubAgentManager } from "./sub-agent/manager";
@@ -21,10 +21,6 @@ import {
   createResumptionMessage,
   resumeMasterAgent,
 } from "./orchestrator";
-import {
-  createConverterState,
-  processChunk as processAssistantChunk,
-} from "@/lib/agents/chunk-converter";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 
 /**
@@ -34,7 +30,7 @@ interface MasterStreamConfig {
   model: Parameters<typeof StreamTextType>[0]["model"];
   tools: Parameters<typeof StreamTextType>[0]["tools"];
   system: Parameters<typeof StreamTextType>[0]["system"];
-  initialMessages: UIMessage[];
+  initialModelMessages: ModelMessage[];
 }
 
 const MAX_ORCHESTRATION_CYCLES = 10;
@@ -59,8 +55,11 @@ export async function createMultiStreamResponse(
     subAgentTimeout: 180000, // 3 minutes
   });
 
-  // Track accumulated messages for resumption
-  const accumulatedMessages: UIMessage[] = masterConfig?.initialMessages || [];
+  // Track accumulated model messages for resumption.
+  // Use AI SDK response.messages to preserve full tool-call execution history.
+  const accumulatedMessages: ModelMessage[] = masterConfig?.initialModelMessages
+    ? [...masterConfig.initialModelMessages]
+    : [];
 
   // Create the unified stream using AI SDK's createUIMessageStream
   const stream = createUIMessageStream({
@@ -137,13 +136,6 @@ export async function createMultiStreamResponse(
             `[MultiStream/${requestId}] Phase 1: Streaming master output`
           );
 
-          let assistantMessage: UIMessage = {
-            id: `assistant-cycle-${cycleNumber}-${Date.now()}`,
-            role: "assistant",
-            parts: [],
-          };
-          const converterState = createConverterState();
-
           // Stream and collect master output
           for await (const chunk of currentStream.toUIMessageStream({
             messageMetadata: ({ part }) => {
@@ -164,15 +156,13 @@ export async function createMultiStreamResponse(
           })) {
             // Write master stream chunks directly
             writer.write(chunk);
-
-            const conversion = processAssistantChunk(chunk, converterState);
-            if (conversion.isFinalized && conversion.message) {
-              assistantMessage = conversion.message;
-            }
           }
 
-          // Add assistant message to history
-          accumulatedMessages.push(assistantMessage);
+          // Add exact response messages to history (includes assistant/tool steps).
+          const response = await currentStream.response;
+          if (response.messages.length > 0) {
+            accumulatedMessages.push(...response.messages);
+          }
 
           orchestrator.notifyMasterComplete();
           console.log(

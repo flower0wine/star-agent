@@ -4,8 +4,8 @@
  * Handles resuming master agent execution with sub-agent results.
  */
 
-import { convertToModelMessages, streamText } from "ai";
-import type { UIMessage } from "ai";
+import { streamText } from "ai";
+import type { ModelMessage } from "ai";
 import type { SubAgentResult } from "./types";
 
 /**
@@ -16,18 +16,12 @@ import type { SubAgentResult } from "./types";
 export function createResumptionMessage(
   results: SubAgentResult[],
   cycleNumber: number
-): UIMessage {
+): ModelMessage {
   const content = formatResultsAsMessage(results, cycleNumber);
 
   return {
-    id: `subagent-results-cycle-${cycleNumber}-${Date.now()}`,
     role: "user",
-    parts: [
-      {
-        type: "text",
-        text: content,
-      },
-    ],
+    content,
   };
 }
 
@@ -80,25 +74,20 @@ export async function resumeMasterAgent(
     model: Parameters<typeof streamText>[0]["model"];
     tools: Parameters<typeof streamText>[0]["tools"];
     system: Parameters<typeof streamText>[0]["system"];
-    messages: UIMessage[];
+    messages: ModelMessage[];
     subAgentResults: SubAgentResult[];
     cycleNumber: number;
     requestId?: string;
     providerOptions?: Parameters<typeof streamText>[0]["providerOptions"];
   },
 ) {
-  const { model, tools, system, messages, subAgentResults, cycleNumber, requestId, providerOptions } = options;
+  const { model, tools, system, messages, cycleNumber, requestId, providerOptions } = options;
 
   // Resumption message is appended by caller (multi-stream orchestration loop).
   // Keep this function pure and avoid double-appending the same cycle summary.
   const updatedMessages = messages;
 
-  // Convert UI messages to model messages
-  const modelMessages = await convertToModelMessages(updatedMessages, {
-    tools,
-  });
-
-  // Create new stream with updated messages
+  // Create new stream with updated model messages
   const logPrefix = requestId
     ? `[${requestId}/Resume/Cycle-${cycleNumber}]`
     : `[MasterResume/Cycle-${cycleNumber}]`;
@@ -107,7 +96,7 @@ export async function resumeMasterAgent(
     model,
     tools,
     system,
-    messages: modelMessages,
+    messages: updatedMessages,
     providerOptions,
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`${logPrefix} Tool started: ${toolCall.toolName}`, {

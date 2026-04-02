@@ -7,7 +7,6 @@
  */
 
 import { convertToModelMessages, streamText, stepCountIs } from "ai";
-import type { UIMessage } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { createMasterAgent } from "@/agents/master";
@@ -131,7 +130,7 @@ export async function handleMasterAgent(
     model: modelInstance.model,
     tools,
     system: systemPrompt,
-    initialMessages: body.messages,
+    initialModelMessages: modelMessages,
   };
 
   // Return multi-stream response (merges master + sub-agent streams)
