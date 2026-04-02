@@ -10,7 +10,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { UIMessage } from "ai";
+import type { LanguageModelUsage, UIMessage } from "ai";
 import type { SubAgentCard } from "@/types/agent";
 import { ChunkConverter } from "@/lib/agents/chunk-converter";
 
@@ -43,6 +43,33 @@ export interface UseSubAgentMessagesReturn {
   reset: () => void;
   /** Remove a specific sub-agent */
   removeSubAgent: (taskId: string) => void;
+}
+
+function extractUsageFromChunk(chunk: unknown): LanguageModelUsage | undefined {
+  if (!chunk || typeof chunk !== "object") {
+    return undefined;
+  }
+
+  const chunkObj = chunk as Record<string, unknown>;
+  const messageMetadata = chunkObj.messageMetadata;
+  if (messageMetadata && typeof messageMetadata === "object") {
+    const totalUsage = (messageMetadata as Record<string, unknown>).totalUsage;
+    if (totalUsage && typeof totalUsage === "object") {
+      return totalUsage as LanguageModelUsage;
+    }
+  }
+
+  const totalUsage = chunkObj.totalUsage;
+  if (totalUsage && typeof totalUsage === "object") {
+    return totalUsage as LanguageModelUsage;
+  }
+
+  const usage = chunkObj.usage;
+  if (usage && typeof usage === "object") {
+    return usage as LanguageModelUsage;
+  }
+
+  return undefined;
 }
 
 /**
@@ -99,10 +126,13 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
         } else if (result.streamingMessage) {
           pendingMessagesRef.current.set(taskId, [result.streamingMessage]);
         }
+
         // 检查完成状态
         if ((chunk as Record<string, unknown>).type === "finish") {
+          const finishUsage = extractUsageFromChunk(chunk);
           pendingCardsRef.current.set(taskId, {
             status: "completed" as const,
+            ...(finishUsage ? { usage: finishUsage } : {}),
           });
         }
       }
@@ -141,6 +171,7 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
             currentOutput: "",
             finalResult: undefined,
             error: undefined,
+            usage: undefined,
             ...update,
           });
         });
@@ -198,6 +229,7 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
             currentOutput: existing?.currentOutput || "",
             finalResult: undefined,
             error: undefined,
+            usage: existing?.usage,
           });
           return next;
         });
@@ -235,6 +267,7 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
         currentOutput: existing?.currentOutput || "",
         finalResult: existing?.finalResult,
         error: existing?.error,
+        usage: existing?.usage,
         ...patch,
       };
 
@@ -245,6 +278,7 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
         && existing.currentOutput === nextCard.currentOutput
         && existing.finalResult === nextCard.finalResult
         && existing.error === nextCard.error
+        && existing.usage === nextCard.usage
       ) {
         return prev;
       }

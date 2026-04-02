@@ -41,12 +41,22 @@ export const SubAgentPanel = memo(({
 
   const usageByTask = useMemo(() => {
     const usageMap = new Map<string, LanguageModelUsage>();
+
+    agents.forEach((card, taskId) => {
+      if (card.usage) {
+        usageMap.set(taskId, card.usage);
+      }
+    });
+
     messages.forEach((taskMessages, taskId) => {
       const usage = sumUsage(taskMessages.map(getMessageUsage));
-      usageMap.set(taskId, usage);
+      if ((usage.totalTokens || 0) > 0) {
+        usageMap.set(taskId, usage);
+      }
     });
+
     return usageMap;
-  }, [messages]);
+  }, [agents, messages]);
 
   const subAgentUsage = useMemo(() => {
     return sumUsage([...usageByTask.values()]);
@@ -131,7 +141,6 @@ export const SubAgentPanel = memo(({
         <SubAgentList
           agents={agentsList}
           activeTaskId={resolvedActiveTaskId}
-          usageByTask={usageByTask}
           onSelect={handleSelect}
         />
         <div className="min-w-0 flex-1">
@@ -146,4 +155,3 @@ export const SubAgentPanel = memo(({
     </div>
   );
 });
-

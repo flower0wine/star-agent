@@ -36,6 +36,7 @@ export interface SubAgentCard {
   currentOutput?: string;
   finalResult?: string;
   error?: string;
+  usage?: LanguageModelUsage;
 }
 
 /**

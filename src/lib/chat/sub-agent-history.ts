@@ -1,6 +1,6 @@
 import { chunksToMessage } from "@/lib/agents/chunk-converter";
 import type { SubAgentCard } from "@/types/agent";
-import type { UIMessage } from "ai";
+import type { LanguageModelUsage, UIMessage } from "ai";
 
 interface SubAgentMessageSnapshot {
   taskId: string;
@@ -19,6 +19,33 @@ export interface BuildSubAgentHistoryOptions {
   isChatLoading: boolean;
 }
 
+function extractUsageFromChunk(chunk: unknown): LanguageModelUsage | undefined {
+  if (!chunk || typeof chunk !== "object") {
+    return undefined;
+  }
+
+  const chunkObj = chunk as Record<string, unknown>;
+  const messageMetadata = chunkObj.messageMetadata;
+  if (messageMetadata && typeof messageMetadata === "object") {
+    const totalUsage = (messageMetadata as Record<string, unknown>).totalUsage;
+    if (totalUsage && typeof totalUsage === "object") {
+      return totalUsage as LanguageModelUsage;
+    }
+  }
+
+  const totalUsage = chunkObj.totalUsage;
+  if (totalUsage && typeof totalUsage === "object") {
+    return totalUsage as LanguageModelUsage;
+  }
+
+  const usage = chunkObj.usage;
+  if (usage && typeof usage === "object") {
+    return usage as LanguageModelUsage;
+  }
+
+  return undefined;
+}
+
 export function buildSubAgentHistoryState(
   messages: UIMessage[],
   options: BuildSubAgentHistoryOptions
@@ -27,6 +54,7 @@ export function buildSubAgentHistoryState(
   const lastMessageId = messages.at(-1)?.id;
   const nextSnapshots = new Map<string, SubAgentMessageSnapshot>();
   const chunksByTask = new Map<string, unknown[]>();
+  const usageByTask = new Map<string, LanguageModelUsage>();
   const progressByTask = new Map<string, {
     progressType: string;
     result?: string;
@@ -95,6 +123,11 @@ export function buildSubAgentHistoryState(
           const chunks = chunksByTask.get(taskId) || [];
           chunks.push(data.chunk);
           chunksByTask.set(taskId, chunks);
+
+          const usage = extractUsageFromChunk(data.chunk);
+          if (usage) {
+            usageByTask.set(taskId, usage);
+          }
         } else {
           progressByTask.set(taskId, {
             progressType,
@@ -109,7 +142,11 @@ export function buildSubAgentHistoryState(
   const restoredMessages = new Map<string, UIMessage[]>();
   chunksByTask.forEach((chunks, taskId) => {
     const restoredMessage = chunksToMessage(chunks);
-    if (restoredMessage) {
+    const hasRenderableParts = Boolean(restoredMessage && restoredMessage.parts.length > 0);
+
+    // Ignore metadata-only restoration (e.g. persisted finish chunk without text/tool parts).
+    // In that case we fallback to finalResult text stored in progress snapshots.
+    if (restoredMessage && hasRenderableParts) {
       restoredMessages.set(taskId, [restoredMessage]);
     }
   });
@@ -119,6 +156,7 @@ export function buildSubAgentHistoryState(
     ...nextSnapshots.keys(),
     ...progressByTask.keys(),
     ...restoredMessages.keys(),
+    ...usageByTask.keys(),
   ]);
 
   allTaskIds.forEach((taskId) => {
@@ -157,6 +195,7 @@ export function buildSubAgentHistoryState(
       task: snapshot?.task || "",
       finalResult,
       error,
+      usage: usageByTask.get(taskId),
     });
   });
 

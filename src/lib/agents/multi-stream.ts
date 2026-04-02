@@ -79,11 +79,17 @@ export async function createMultiStreamResponse(
           orchestrator.registerSubAgent(progress.taskId);
         }
 
-        // Forward message-chunk directly to the client
+        // Forward message-chunk directly to the client.
+        // Persist only the final finish chunk so sub-agent usage can be restored after refresh.
         if (progress.type === "message-chunk" && progress.chunk) {
+          const chunkType = (typeof progress.chunk === "object" && progress.chunk)
+            ? (progress.chunk as { type?: string }).type
+            : undefined;
+          const isFinalChunk = chunkType === "finish";
+
           writer.write({
             type: "data-subagent",
-            transient: true,
+            transient: !isFinalChunk,
             data: {
               taskId: progress.taskId,
               task: taskText,
