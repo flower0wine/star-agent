@@ -84,7 +84,6 @@ export async function handleMasterAgent(
     systemPrompt = `${systemPrompt}\n\n## 用户附加指令\n${agentConfig.additionalSystemPrompt}`;
   }
 
-
   // Convert messages to model format
   console.log(`[${requestId}] Converting messages...`);
   const modelMessages = await convertToModelMessages(body.messages, {
@@ -99,6 +98,20 @@ export async function handleMasterAgent(
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
+    experimental_onToolCallStart: ({ toolCall }) => {
+      console.log(`[${requestId}] Master tool started: ${toolCall.toolName}`, {
+        toolCallId: toolCall.toolCallId,
+        input: toolCall.input,
+      });
+    },
+    experimental_onToolCallFinish: ({ toolCall, durationMs, success, error }) => {
+      console.log(`[${requestId}] Master tool finished: ${toolCall.toolName}`, {
+        toolCallId: toolCall.toolCallId,
+        durationMs,
+        success,
+        error: error ? String(error) : undefined,
+      });
+    },
   };
 
   // Add reasoning support for models that support it

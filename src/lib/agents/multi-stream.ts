@@ -229,8 +229,7 @@ export async function createMultiStreamResponse(
           orchestrator.startNewCycle();
 
           // Keep accumulated history consistent across cycles.
-          // resumeMasterAgent appends this message internally for the next stream,
-          // but we also need it in accumulatedMessages for subsequent resumes.
+          // Resumption message is appended here and consumed by resumeMasterAgent.
           const resumptionMessage = createResumptionMessage(subAgentResults, cycleNumber);
           accumulatedMessages.push(resumptionMessage);
 
@@ -242,6 +241,7 @@ export async function createMultiStreamResponse(
             messages: accumulatedMessages,
             subAgentResults,
             cycleNumber,
+            requestId,
           });
 
           console.log(

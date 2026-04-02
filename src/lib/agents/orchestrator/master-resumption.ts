@@ -39,11 +39,11 @@ function formatResultsAsMessage(
   cycleNumber: number
 ): string {
   if (results.length === 0) {
-    return `[系统消息] 第 ${cycleNumber} 轮：所有子 Agent 已完成，但没有返回结果。`;
+    return `[子 Agent 结果] 第 ${cycleNumber} 轮：所有子 Agent 已完成，但没有返回结果。`;
   }
 
   const sections: string[] = [
-    `[系统消息] 第 ${cycleNumber} 轮子 Agent 执行结果汇总 (共 ${results.length} 个):\n`,
+    `[子 Agent 结果] 第 ${cycleNumber} 轮执行结果汇总 (共 ${results.length} 个):\n`,
   ];
 
   results.forEach((result, index) => {
@@ -67,10 +67,6 @@ function formatResultsAsMessage(
     }
   });
 
-  sections.push(
-    "\n---\n请根据以上子 Agent 的执行结果，为用户提供汇总分析和最终答案。如果需要进一步处理，可以继续创建新的子 Agent。"
-  );
-
   return sections.join("\n");
 }
 
@@ -87,16 +83,15 @@ export async function resumeMasterAgent(
     messages: UIMessage[];
     subAgentResults: SubAgentResult[];
     cycleNumber: number;
+    requestId?: string;
     providerOptions?: Parameters<typeof streamText>[0]["providerOptions"];
   },
 ) {
-  const { model, tools, system, messages, subAgentResults, cycleNumber, providerOptions } = options;
+  const { model, tools, system, messages, subAgentResults, cycleNumber, requestId, providerOptions } = options;
 
-  // Create resumption message
-  const resumptionMessage = createResumptionMessage(subAgentResults, cycleNumber);
-
-  // Append to message history
-  const updatedMessages = [...messages, resumptionMessage];
+  // Resumption message is appended by caller (multi-stream orchestration loop).
+  // Keep this function pure and avoid double-appending the same cycle summary.
+  const updatedMessages = messages;
 
   // Convert UI messages to model messages
   const modelMessages = await convertToModelMessages(updatedMessages, {
@@ -104,11 +99,29 @@ export async function resumeMasterAgent(
   });
 
   // Create new stream with updated messages
+  const logPrefix = requestId
+    ? `[${requestId}/Resume/Cycle-${cycleNumber}]`
+    : `[MasterResume/Cycle-${cycleNumber}]`;
+
   return streamText({
     model,
     tools,
     system,
     messages: modelMessages,
     providerOptions,
+    experimental_onToolCallStart: ({ toolCall }) => {
+      console.log(`${logPrefix} Tool started: ${toolCall.toolName}`, {
+        toolCallId: toolCall.toolCallId,
+        input: toolCall.input,
+      });
+    },
+    experimental_onToolCallFinish: ({ toolCall, durationMs, success, error }) => {
+      console.log(`${logPrefix} Tool finished: ${toolCall.toolName}`, {
+        toolCallId: toolCall.toolCallId,
+        durationMs,
+        success,
+        error: error ? String(error) : undefined,
+      });
+    },
   });
 }
