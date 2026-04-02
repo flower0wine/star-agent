@@ -66,6 +66,15 @@ export const SubAgentThreadView = memo(({
         )}
       </div>
 
+      {agent.task && (
+        <div className="border-b bg-muted/20 px-4 py-2">
+          <p className="text-[11px] text-muted-foreground">任务</p>
+          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed">
+            {agent.task}
+          </p>
+        </div>
+      )}
+
       <ScrollArea className="flex-1">
         <div className="space-y-4 p-4">
           {displayMessages.length === 0 ? (
@@ -91,4 +100,3 @@ export const SubAgentThreadView = memo(({
     </div>
   );
 });
-

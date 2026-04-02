@@ -131,7 +131,18 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
           const existing = next.get(taskId);
           if (existing) {
             next.set(taskId, { ...existing, ...update });
+            return;
           }
+
+          next.set(taskId, {
+            taskId,
+            status: "pending",
+            task: undefined,
+            currentOutput: "",
+            finalResult: undefined,
+            error: undefined,
+            ...update,
+          });
         });
         return next;
       });
@@ -249,8 +260,29 @@ export function useSubAgentMessages(): UseSubAgentMessagesReturn {
     messages: Map<string, UIMessage[]>;
   }) => {
     const { cards, messages } = payload;
-    setSubAgentCards(cards);
-    setSubAgentMessages(messages);
+    setSubAgentCards((prev) => {
+      if (cards.size === 0 && prev.size > 0) {
+        return prev;
+      }
+
+      const next = new Map(prev);
+      cards.forEach((card, taskId) => {
+        next.set(taskId, card);
+      });
+      return next;
+    });
+
+    setSubAgentMessages((prev) => {
+      if (messages.size === 0 && prev.size > 0) {
+        return prev;
+      }
+
+      const next = new Map(prev);
+      messages.forEach((taskMessages, taskId) => {
+        next.set(taskId, taskMessages);
+      });
+      return next;
+    });
   }, []);
 
   /**

@@ -64,6 +64,8 @@ export type SubAgentProgressType
 export interface SubAgentProgress {
   /** Task ID */
   taskId: string;
+  /** Task description */
+  task?: string;
   /** Progress type */
   type: SubAgentProgressType;
   /** UIMessageChunk for message-chunk events */

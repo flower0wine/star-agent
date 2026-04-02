@@ -160,7 +160,12 @@ export const MessageRenderer = memo(({
       // 1. Text content
       if (isTextUIPart(part)) {
         return (
-          <MessageResponse key={`text-${i}`}>{part.text}</MessageResponse>
+          <MessageResponse
+            key={`text-${i}`}
+            isAnimating={isStreaming && isLastMessage && i === message.parts.length - 1}
+          >
+            {part.text}
+          </MessageResponse>
         );
       }
 

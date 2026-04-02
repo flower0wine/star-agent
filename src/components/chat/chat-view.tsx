@@ -56,6 +56,7 @@ import {
 
 interface SubAgentProgressData {
   taskId: string;
+  task?: string;
   progressType?: string;
   chunk?: unknown;
   error?: string;
@@ -134,6 +135,7 @@ export function ChatView({
   const [input, setInput] = useState("");
   const [isSubAgentPanelOpen, setIsSubAgentPanelOpen] = useState(false);
   const [activeSubAgentTaskId, setActiveSubAgentTaskId] = useState<string | undefined>(undefined);
+  const subAgentCardsRef = useRef(subAgentCards);
 
   // Handler for custom data parts (sub-agent progress)
   const handleData: ChatOnDataCallback<UIMessage<ChatMessageMetadata>> = useCallback(
@@ -142,9 +144,18 @@ export function ChatView({
         return;
 
       const subData = dataPart.data as SubAgentProgressData;
-      const { taskId, progressType, chunk, error, result, progress } = subData;
+      const { taskId, task, progressType, chunk, error, result, progress } = subData;
       if (!taskId)
         return;
+
+      if (selectedAgent === "master") {
+        setIsSubAgentPanelOpen(true);
+        setActiveSubAgentTaskId((prev) => prev || taskId);
+      }
+
+      if (task) {
+        upsertSubAgentCard(taskId, { task });
+      }
 
       if (progressType === "message-chunk" && chunk) {
         processChunk(taskId, chunk);
@@ -152,7 +163,7 @@ export function ChatView({
         handleProgress(taskId, progressType || "progress", progress, result, error);
       }
     },
-    [processChunk, handleProgress]
+    [processChunk, handleProgress, selectedAgent, upsertSubAgentCard]
   );
 
   // Chat hook with persistence - only active when we have a conversationId
@@ -186,6 +197,10 @@ export function ChatView({
     [messages]
   );
   const lastHydratedHistoryRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    subAgentCardsRef.current = subAgentCards;
+  }, [subAgentCards]);
 
   // 会话切换时重置子 Agent UI 状态，避免污染到其他会话
   useEffect(() => {
@@ -263,10 +278,10 @@ export function ChatView({
         task,
       });
     }
-    if (!subAgentCards.has(taskId)) {
+    if (!subAgentCardsRef.current.has(taskId)) {
       handleProgress(taskId, "start", 0);
     }
-  }, [subAgentCards, handleProgress, upsertSubAgentCard]);
+  }, [handleProgress, upsertSubAgentCard]);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -295,37 +310,6 @@ export function ChatView({
     setSelectedAgent(id as AgentId);
   }, []);
 
-  // Auth restoring state (avoid login flash)
-  if ((selectedAgent === "star" || selectedAgent === "master") && isRestoring) {
-    return (
-      <ChatLayout showBackground>
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-        </div>
-      </ChatLayout>
-    );
-  }
-
-  // Login page for unauthenticated users
-  if ((selectedAgent === "star" || selectedAgent === "master") && !isVerified) {
-    return (
-      <ChatLayout showBackground>
-        <div className="flex flex-1 flex-col items-center justify-center p-4">
-          <AgentSelector
-            selectedAgentId={selectedAgent}
-            onSelect={handleAgentSelect}
-            className="mb-8"
-          />
-          <StarLogin
-            onSubmit={login}
-            error={authError}
-            isLoading={isAuthLoading}
-          />
-        </div>
-      </ChatLayout>
-    );
-  }
-
   // Current suggestions based on agent
   const suggestions = SUGGESTIONS[selectedAgent] || [];
 
@@ -340,7 +324,7 @@ export function ChatView({
     />
   );
 
-  const chatMessages = (
+  const chatMessages = useMemo(() => (
     <>
       <Conversation className="flex-1 min-h-0">
         <ConversationContent>
@@ -400,7 +384,48 @@ export function ChatView({
         </ConversationContent>
       </Conversation>
     </>
-  );
+  ), [
+    messages,
+    isLoadingMessages,
+    username,
+    suggestions,
+    handleSuggestionSelect,
+    chatError,
+    isChatLoading,
+    regenerate,
+    handleOpenSubAgentPanel,
+  ]);
+
+  // Auth restoring state (avoid login flash)
+  if ((selectedAgent === "star" || selectedAgent === "master") && isRestoring) {
+    return (
+      <ChatLayout showBackground>
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </ChatLayout>
+    );
+  }
+
+  // Login page for unauthenticated users
+  if ((selectedAgent === "star" || selectedAgent === "master") && !isVerified) {
+    return (
+      <ChatLayout showBackground>
+        <div className="flex flex-1 flex-col items-center justify-center p-4">
+          <AgentSelector
+            selectedAgentId={selectedAgent}
+            onSelect={handleAgentSelect}
+            className="mb-8"
+          />
+          <StarLogin
+            onSubmit={login}
+            error={authError}
+            isLoading={isAuthLoading}
+          />
+        </div>
+      </ChatLayout>
+    );
+  }
 
   // Main chat interface
   return (

@@ -89,6 +89,7 @@ export function useAgentChat({
       credentials: "same-origin",
     }),
     onData,
+    experimental_throttle: 40,
   });
 
   // 消息持久化

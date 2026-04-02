@@ -71,6 +71,8 @@ export async function createMultiStreamResponse(
         if (!subManager.isTaskInSession(progress.taskId, requestId)) {
           return;
         }
+        const task = subManager.getTask(progress.taskId);
+        const taskText = task?.task;
 
         // Register sub-agent with orchestrator
         if (progress.type === "start") {
@@ -81,8 +83,10 @@ export async function createMultiStreamResponse(
         if (progress.type === "message-chunk" && progress.chunk) {
           writer.write({
             type: "data-subagent",
+            transient: true,
             data: {
               taskId: progress.taskId,
+              task: taskText,
               progressType: progress.type,
               chunk: progress.chunk,
               progress: progress.progress,
@@ -91,11 +95,16 @@ export async function createMultiStreamResponse(
           return;
         }
 
+        const isHighFrequencyProgress
+          = progress.type === "start" || progress.type === "progress";
+
         // Write sub-agent progress as data part (for start, progress, complete, error)
         writer.write({
           type: "data-subagent",
+          transient: isHighFrequencyProgress,
           data: {
             taskId: progress.taskId,
+            task: taskText,
             progressType: progress.type,
             progress: progress.progress,
             error: progress.error,

@@ -117,7 +117,7 @@ export async function executeSubAgentTask(
   console.log(`[Executor/${task.id}] ToolLoopAgent created`);
 
   let currentProgress = 0;
-  const totalRepos = task.repos.length;
+  let lastProgressEmitAt = 0;
 
   // Add timeout to prevent hanging
   const timeoutMs = 120000; // 2 minutes timeout
@@ -174,11 +174,15 @@ export async function executeSubAgentTask(
             // notify() 会在处理 "finish" chunk 时设置实际的 task.result
           } else if (chunkType === "text-delta" && currentProgress < 90) {
             currentProgress = Math.min(currentProgress + 5, 90);
-            onProgress({
-              taskId: task.id,
-              type: "progress",
-              progress: currentProgress,
-            });
+            const now = Date.now();
+            if (now - lastProgressEmitAt >= 120) {
+              lastProgressEmitAt = now;
+              onProgress({
+                taskId: task.id,
+                type: "progress",
+                progress: currentProgress,
+              });
+            }
           }
         }
       }
