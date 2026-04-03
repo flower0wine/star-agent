@@ -21,9 +21,14 @@ import {
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { useSubAgentMessages } from "@/hooks/use-sub-agent-messages";
 import { useStarContext } from "@/hooks/use-star-context";
+import { useAgentConfig } from "@/hooks/use-agent-config";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useChatHistoryStore } from "@/stores/chat-history-store";
 import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
+import { DEFAULT_MASTER_STATIC_CONFIG } from "@/agents/master/static-config";
+import { DEFAULT_STAR_STATIC_CONFIG } from "@/agents/star/static-config";
+import type { MasterAgentStaticConfig } from "@/agents/master/static-config";
+import type { StarAgentStaticConfig } from "@/agents/star/static-config";
 
 import {
   ChatLayout,
@@ -78,6 +83,10 @@ interface PendingRouteMessagePayload {
 
 const PendingRouteMessageStorageKey = "star-agent:pending-route-message";
 
+function readToolSelectionConfigured(customParams: Record<string, unknown>): boolean {
+  return customParams.toolSelectionConfigured === true;
+}
+
 const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
   star: [
     { text: "展示我收藏最多 star 的仓库" },
@@ -107,6 +116,14 @@ export function ChatView({
 }: ChatViewProps) {
   const router = useRouter();
   const { createNewConversation } = useChatHistoryStore();
+  const { config: starAgentConfig } = useAgentConfig<StarAgentStaticConfig>({
+    agentId: "star",
+    defaultStaticConfig: DEFAULT_STAR_STATIC_CONFIG,
+  });
+  const { config: masterAgentConfig } = useAgentConfig<MasterAgentStaticConfig>({
+    agentId: "master",
+    defaultStaticConfig: DEFAULT_MASTER_STATIC_CONFIG,
+  });
 
   // Agent selection - 使用初始值，但允许用户切换
   const [selectedAgent, setSelectedAgent] = useState<AgentId>(initialAgentId);
@@ -182,6 +199,19 @@ export function ChatView({
   );
 
   // Chat hook with persistence - only active when we have a conversationId
+  const selectedAgentConfig = selectedAgent === "star" ? starAgentConfig : masterAgentConfig;
+  const hasToolSelectionConfigured = selectedAgentConfig
+    ? readToolSelectionConfigured(selectedAgentConfig.dynamicConfig.customParams)
+    : false;
+  const agentRuntimeConfig = selectedAgentConfig
+    ? {
+        additionalSystemPrompt: selectedAgentConfig.dynamicConfig.additionalSystemPrompt || undefined,
+        enabledTools: hasToolSelectionConfigured
+          ? selectedAgentConfig.dynamicConfig.enabledTools
+          : undefined,
+      }
+    : undefined;
+
   const {
     messages,
     sendMessage,
@@ -194,6 +224,7 @@ export function ChatView({
     api: "/api/chat",
     agentId: selectedAgent,
     context: selectedAgent === "star" || selectedAgent === "master" ? { username, repos } : {},
+    agentConfig: agentRuntimeConfig,
     onData: handleData,
     conversationId: conversationId || null,
     username,

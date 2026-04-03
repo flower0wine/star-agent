@@ -1,7 +1,7 @@
 /**
  * Tool Registry
  *
- * 定义所有可用工具的元数据，用于 Agent 配置中的工具选择
+ * 集中定义所有可用工具元数据，并维护 Agent 与工具的映射关系
  */
 
 // ============================================================================
@@ -20,9 +20,11 @@ export interface ToolMeta {
   description: string;
   /** 工具分类 */
   category: ToolCategory;
-  /** 是否默认启用 */
-  defaultEnabled: boolean;
-  /** 是否为核心工具（不可禁用） */
+  /** 适用的 Agent */
+  agentIds: string[];
+  /** 默认启用的 Agent */
+  defaultEnabledAgentIds: string[];
+  /** 是否为核心工具（仅标记，不做强制限制） */
   isCore?: boolean;
 }
 
@@ -54,16 +56,17 @@ export const TOOL_CATEGORIES: Record<ToolCategory, { label: string; description:
 };
 
 // ============================================================================
-// Star Agent Tools
+// Centralized Tool Catalog
 // ============================================================================
 
-export const STAR_AGENT_TOOLS: ToolMeta[] = [
+export const TOOL_CATALOG: ToolMeta[] = [
   {
     id: "searchRepositories",
     name: "搜索仓库",
     description: "根据关键字、语言、主题等条件搜索和过滤仓库",
     category: "search",
-    defaultEnabled: true,
+    agentIds: ["star"],
+    defaultEnabledAgentIds: ["star"],
     isCore: true,
   },
   {
@@ -71,7 +74,8 @@ export const STAR_AGENT_TOOLS: ToolMeta[] = [
     name: "展示仓库",
     description: "以卡片形式展示选定的仓库列表",
     category: "display",
-    defaultEnabled: true,
+    agentIds: ["star", "master"],
+    defaultEnabledAgentIds: ["star", "master"],
     isCore: true,
   },
   {
@@ -79,21 +83,16 @@ export const STAR_AGENT_TOOLS: ToolMeta[] = [
     name: "获取 README",
     description: "获取仓库的 README 文档内容",
     category: "info",
-    defaultEnabled: true,
+    agentIds: ["star"],
+    defaultEnabledAgentIds: ["star"],
   },
-];
-
-// ============================================================================
-// Master Agent Tools
-// ============================================================================
-
-export const MASTER_AGENT_TOOLS: ToolMeta[] = [
   {
     id: "getAllRepos",
     name: "获取所有仓库",
     description: "获取全部仓库列表（仅当仓库数量 ≤ 200 时可用）",
     category: "search",
-    defaultEnabled: true,
+    agentIds: ["master"],
+    defaultEnabledAgentIds: ["master"],
     isCore: true,
   },
   {
@@ -101,36 +100,28 @@ export const MASTER_AGENT_TOOLS: ToolMeta[] = [
     name: "创建子 Agent",
     description: "创建子 Agent 来处理大量仓库（仓库数量 > 200 时使用）",
     category: "agent",
-    defaultEnabled: true,
-    isCore: true,
-  },
-  {
-    id: "displayRepositories",
-    name: "展示仓库",
-    description: "以卡片形式展示选定的仓库列表",
-    category: "display",
-    defaultEnabled: true,
+    agentIds: ["master"],
+    defaultEnabledAgentIds: ["master"],
     isCore: true,
   },
 ];
 
 // ============================================================================
-// Registry
+// Registry Helpers
 // ============================================================================
-
-/**
- * Agent 工具映射
- */
-export const AGENT_TOOLS_MAP: Record<string, ToolMeta[]> = {
-  star: STAR_AGENT_TOOLS,
-  master: MASTER_AGENT_TOOLS,
-};
 
 /**
  * 获取 Agent 的所有可用工具
  */
 export function getAgentTools(agentId: string): ToolMeta[] {
-  return AGENT_TOOLS_MAP[agentId] || [];
+  return TOOL_CATALOG.filter((tool) => tool.agentIds.includes(agentId));
+}
+
+/**
+ * 获取全量工具目录
+ */
+export function getAllTools(): ToolMeta[] {
+  return TOOL_CATALOG;
 }
 
 /**
@@ -138,11 +129,13 @@ export function getAgentTools(agentId: string): ToolMeta[] {
  */
 export function getDefaultEnabledTools(agentId: string): string[] {
   const tools = getAgentTools(agentId);
-  return tools.filter((t) => t.defaultEnabled).map((t) => t.id);
+  return tools
+    .filter((tool) => tool.defaultEnabledAgentIds.includes(agentId))
+    .map((tool) => tool.id);
 }
 
 /**
- * 获取 Agent 的核心工具 ID 列表（不可禁用）
+ * 获取 Agent 的核心工具 ID 列表（仅标记用途）
  */
 export function getCoreTools(agentId: string): string[] {
   const tools = getAgentTools(agentId);
@@ -150,16 +143,15 @@ export function getCoreTools(agentId: string): string[] {
 }
 
 /**
- * 验证工具列表（确保核心工具始终启用）
+ * 标准化启用工具列表（去重 + 仅保留该 Agent 支持的工具）
  */
-export function validateEnabledTools(agentId: string, enabledTools: string[]): string[] {
-  const coreTools = getCoreTools(agentId);
-  const validTools = new Set(enabledTools);
-
-  // 确保核心工具始终存在
-  for (const tool of coreTools) {
-    validTools.add(tool);
+export function normalizeEnabledTools(agentId: string, enabledTools: string[]): string[] {
+  const availableToolIds = new Set(getAgentTools(agentId).map((tool) => tool.id));
+  const normalized = new Set<string>();
+  for (const toolId of enabledTools) {
+    if (availableToolIds.has(toolId)) {
+      normalized.add(toolId);
+    }
   }
-
-  return [...validTools];
+  return [...normalized];
 }

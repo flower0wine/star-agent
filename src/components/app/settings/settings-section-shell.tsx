@@ -23,13 +23,12 @@ export function SettingsSectionShell({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -14 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className={cn("space-y-6", className)}
+      className={cn("space-y-3", className)}
     >
       <div className="space-y-1">
         <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      <Separator />
       {children}
     </motion.section>
   );

@@ -27,6 +27,11 @@ export interface ChatModelConfig {
   apiKey?: string;
 }
 
+export interface AgentRuntimeConfig {
+  additionalSystemPrompt?: string;
+  enabledTools?: string[];
+}
+
 /**
  * Hook options
  */
@@ -37,6 +42,8 @@ interface UseAgentChatOptions {
   agentId?: string;
   /** Additional context to pass to the agent */
   context?: Record<string, unknown>;
+  /** Agent 运行时配置 */
+  agentConfig?: AgentRuntimeConfig;
   /** 当前模型配置 */
   modelConfig?: ChatModelConfig;
   /** Callback for custom data parts (e.g., sub-agent progress) */
@@ -65,18 +72,24 @@ export function useAgentChat({
   api = "/api/chat",
   agentId = "star",
   context = {},
+  agentConfig,
   modelConfig,
   onData,
   conversationId = null,
   username = null,
 }: UseAgentChatOptions = {}) {
   const contextRef = useRef(context);
+  const agentConfigRef = useRef(agentConfig);
   const modelConfigRef = useRef(modelConfig);
 
   // Always keep context ref updated
   useEffect(() => {
     contextRef.current = context;
   }, [context]);
+
+  useEffect(() => {
+    agentConfigRef.current = agentConfig;
+  }, [agentConfig]);
 
   useEffect(() => {
     modelConfigRef.current = modelConfig;
@@ -114,6 +127,7 @@ export function useAgentChat({
       body: {
         agentId,
         context: contextRef.current,
+        agentConfig: agentConfigRef.current,
         modelConfig: modelConfigRef.current,
       },
     });

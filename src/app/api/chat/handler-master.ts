@@ -14,7 +14,6 @@ import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
 import { createMultiStreamResponse } from "@/lib/agents/multi-stream";
-import { getCoreTools } from "@/lib/agents/tool-registry";
 
 /**
  * Handle Master Agent requests
@@ -70,9 +69,8 @@ export async function handleMasterAgent(
   });
 
   // Apply agent configuration: filter tools based on enabledTools
-  if (agentConfig.enabledTools && agentConfig.enabledTools.length > 0) {
-    const coreTools = getCoreTools("master");
-    const enabledSet = new Set([...agentConfig.enabledTools, ...coreTools]);
+  if (Array.isArray(agentConfig.enabledTools)) {
+    const enabledSet = new Set(agentConfig.enabledTools);
     tools = Object.fromEntries(
       Object.entries(tools).filter(([key]) => enabledSet.has(key))
     );
