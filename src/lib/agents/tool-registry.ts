@@ -104,6 +104,24 @@ export const TOOL_CATALOG: ToolMeta[] = [
     defaultEnabledAgentIds: ["master"],
     isCore: true,
   },
+  {
+    id: "searchPatents",
+    name: "检索专利",
+    description: "按关键词、公司和时间范围检索公开专利",
+    category: "search",
+    agentIds: ["patent"],
+    defaultEnabledAgentIds: ["patent"],
+    isCore: true,
+  },
+  {
+    id: "analyzePatentTrends",
+    name: "分析专利趋势",
+    description: "按公司聚合专利趋势，辅助判断未来技术方向",
+    category: "info",
+    agentIds: ["patent"],
+    defaultEnabledAgentIds: ["patent"],
+    isCore: true,
+  },
 ];
 
 // ============================================================================
@@ -155,3 +173,4 @@ export function normalizeEnabledTools(agentId: string, enabledTools: string[]): 
   }
   return [...normalized];
 }
+

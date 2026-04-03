@@ -15,6 +15,10 @@ export interface AgentConfigPayload {
   additionalSystemPrompt?: string;
   /** 启用的工具 ID 列表 */
   enabledTools?: string[];
+  /** 动态自定义参数 */
+  customParams?: Record<string, unknown>;
+  /** 静态配置参数快照 */
+  staticParams?: Record<string, unknown>;
 }
 
 export interface ChatModelConfigPayload {
@@ -44,3 +48,4 @@ export interface StarAgentContext {
   repos: GitHubRepo[];
   reposContext: string;
 }
+

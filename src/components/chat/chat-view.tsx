@@ -26,8 +26,10 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useChatHistoryStore } from "@/stores/chat-history-store";
 import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 import { DEFAULT_MASTER_STATIC_CONFIG } from "@/agents/master/static-config";
+import { DEFAULT_PATENT_STATIC_CONFIG } from "@/agents/patent/static-config";
 import { DEFAULT_STAR_STATIC_CONFIG } from "@/agents/star/static-config";
 import type { MasterAgentStaticConfig } from "@/agents/master/static-config";
+import type { PatentAgentStaticConfig } from "@/agents/patent/static-config";
 import type { StarAgentStaticConfig } from "@/agents/star/static-config";
 
 import {
@@ -98,6 +100,11 @@ const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
     { text: "查找最近更新的仓库" },
     { text: "分析仓库的技术栈分布" },
   ],
+  patent: [
+    { text: "检索最近一年的固态电池专利" },
+    { text: "分析 NVIDIA 最近一年专利趋势并判断技术方向" },
+    { text: "查找具身智能相关的最新专利" },
+  ],
 };
 
 interface ChatViewProps {
@@ -123,6 +130,10 @@ export function ChatView({
   const { config: masterAgentConfig } = useAgentConfig<MasterAgentStaticConfig>({
     agentId: "master",
     defaultStaticConfig: DEFAULT_MASTER_STATIC_CONFIG,
+  });
+  const { config: patentAgentConfig } = useAgentConfig<PatentAgentStaticConfig>({
+    agentId: "patent",
+    defaultStaticConfig: DEFAULT_PATENT_STATIC_CONFIG,
   });
 
   // Agent selection - 使用初始值，但允许用户切换
@@ -199,7 +210,9 @@ export function ChatView({
   );
 
   // Chat hook with persistence - only active when we have a conversationId
-  const selectedAgentConfig = selectedAgent === "star" ? starAgentConfig : masterAgentConfig;
+  const selectedAgentConfig = selectedAgent === "star"
+    ? starAgentConfig
+    : (selectedAgent === "master" ? masterAgentConfig : patentAgentConfig);
   const hasToolSelectionConfigured = selectedAgentConfig
     ? readToolSelectionConfigured(selectedAgentConfig.dynamicConfig.customParams)
     : false;
@@ -209,6 +222,8 @@ export function ChatView({
         enabledTools: hasToolSelectionConfigured
           ? selectedAgentConfig.dynamicConfig.enabledTools
           : undefined,
+        customParams: selectedAgentConfig.dynamicConfig.customParams,
+        staticParams: selectedAgentConfig.staticConfig as Record<string, unknown>,
       }
     : undefined;
 
@@ -459,7 +474,9 @@ export function ChatView({
       onSubmit={handleSubmit}
       onStop={stop}
       isLoading={isInputBusy}
-      placeholder={selectedAgent === "star" ? "询问关于你的仓库..." : "输入消息..."}
+      placeholder={selectedAgent === "star"
+        ? "询问关于你的仓库..."
+        : (selectedAgent === "patent" ? "输入专利检索或趋势分析问题..." : "输入消息...")}
     />
   );
 
@@ -470,8 +487,10 @@ export function ChatView({
           <AnimatePresence initial={false}>
             {messages.length === 0 && !isLoadingMessages ? (
               <EmptyState
-                title={`欢迎回来，@${username}`}
-                description="有什么我可以帮助你的？你可以询问关于你 Star 仓库的任何问题。"
+                title={selectedAgent === "patent" ? "Patent Agent 已就绪" : `欢迎回来，@${username}`}
+                description={selectedAgent === "patent"
+                  ? "你可以检索最近专利、分析公司技术方向，或比较不同技术主题。"
+                  : "有什么我可以帮助你的？你可以询问关于你 Star 仓库的任何问题。"}
               >
                 <SuggestionList
                   suggestions={suggestions}
@@ -527,6 +546,7 @@ export function ChatView({
     messages,
     isLoadingMessages,
     username,
+    selectedAgent,
     suggestions,
     handleSuggestionSelect,
     chatError,
@@ -580,8 +600,8 @@ export function ChatView({
             />
           )}
           rightSlot={showModelPicker ? <ChatModelPicker /> : undefined}
-          username={username}
-          showLogout
+          username={selectedAgent === "patent" ? undefined : username}
+          showLogout={selectedAgent !== "patent"}
           onLogout={handleLogout}
         />
       )}

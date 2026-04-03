@@ -30,6 +30,8 @@ export interface ChatModelConfig {
 export interface AgentRuntimeConfig {
   additionalSystemPrompt?: string;
   enabledTools?: string[];
+  customParams?: Record<string, unknown>;
+  staticParams?: Record<string, unknown>;
 }
 
 /**
@@ -140,3 +142,4 @@ export function useAgentChat({
     activeConversationId,
   };
 }
+

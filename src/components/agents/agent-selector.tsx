@@ -6,7 +6,7 @@
 
 "use client";
 
-import { StarIcon, WorkflowIcon, CheckIcon } from "lucide-react";
+import { StarIcon, WorkflowIcon, CheckIcon, FileSearchIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
@@ -38,9 +38,15 @@ export const AVAILABLE_AGENTS: AgentConfig[] = [
     description: "智能分配子 Agent",
     icon: <WorkflowIcon className="size-5" />,
   },
+  {
+    id: "patent",
+    name: "Patent Agent",
+    description: "专利检索与趋势判断",
+    icon: <FileSearchIcon className="size-5" />,
+  },
 ];
 
-export type AgentId = "star" | "master";
+export type AgentId = "star" | "master" | "patent";
 
 interface AgentSelectorProps {
   /** Currently selected agent ID */
@@ -137,10 +143,11 @@ export function AgentSelector({
             {/* 文字内容 */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className={cn(
-                  "font-semibold text-sm transition-colors",
-                  isSelected ? "text-foreground" : "text-foreground/80"
-                )}
+                <span
+                  className={cn(
+                    "font-semibold text-sm transition-colors",
+                    isSelected ? "text-foreground" : "text-foreground/80"
+                  )}
                 >
                   {agent.name}
                 </span>

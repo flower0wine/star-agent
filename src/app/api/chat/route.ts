@@ -21,6 +21,7 @@ import { NextResponse } from "next/server";
 import { getModelInfo } from "./model";
 import { handleStarAgent } from "./handler";
 import { handleMasterAgent } from "./handler-master";
+import { handlePatentAgent } from "./handler-patent";
 
 // Re-export types for external usage
 export type { ChatMessage } from "./types";
@@ -54,6 +55,11 @@ export async function POST(request: NextRequest) {
       return result;
     }
 
+    // Handle Patent Agent
+    if (agentId === "patent") {
+      return handlePatentAgent(requestId, body, request.signal);
+    }
+
     // Unknown agent
     return NextResponse.json(
       { error: `Agent "${agentId}" not found` },
@@ -80,3 +86,4 @@ export async function GET() {
     model: modelInfo,
   });
 }
+

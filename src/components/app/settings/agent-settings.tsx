@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
-import { RefreshCwIcon, StarIcon, WorkflowIcon } from "lucide-react";
+import { RefreshCwIcon, StarIcon, WorkflowIcon, FileSearchIcon } from "lucide-react";
 
 import { useAgentConfig } from "@/hooks/use-agent-config";
 import {
@@ -19,12 +19,26 @@ import {
   FETCH_MODE_OPTIONS as MASTER_FETCH_MODE_OPTIONS,
 } from "@/agents/master/static-config";
 import type { MasterAgentStaticConfig, MasterFetchMode } from "@/agents/master/static-config";
+import {
+  DEFAULT_PATENT_STATIC_CONFIG,
+  PATENT_LOOKBACK_OPTIONS,
+  PATENT_MAX_RESULTS_OPTIONS,
+  PATENT_PROVIDER_OPTIONS,
+  PATENT_SORT_OPTIONS,
+} from "@/agents/patent/static-config";
+import type {
+  PatentAgentCustomParams,
+  PatentAgentStaticConfig,
+  PatentApiProvider,
+  PatentSortBy,
+} from "@/agents/patent/static-config";
 import { SettingsSectionShell } from "./settings-section-shell";
 import { AgentSettingsSidebar } from "./agent-settings/agent-settings-sidebar";
 import type { AgentSidebarItem } from "./agent-settings/agent-settings-sidebar";
 import { AgentToolCenter } from "./agent-settings/agent-tool-center";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -39,7 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 dayjs.extend(relativeTime);
 dayjs.locale("zh-cn");
 
-type AgentId = "star" | "master";
+type AgentId = "star" | "master" | "patent";
 
 const AGENTS: AgentSidebarItem[] = [
   {
@@ -53,6 +67,12 @@ const AGENTS: AgentSidebarItem[] = [
     name: "Master Agent",
     description: "任务编排与子 Agent",
     icon: <WorkflowIcon className="size-4" />,
+  },
+  {
+    id: "patent",
+    name: "Patent Agent",
+    description: "专利检索与趋势分析",
+    icon: <FileSearchIcon className="size-4" />,
   },
 ];
 
@@ -188,6 +208,197 @@ function PromptCard({ id, title, description, value, onChange }: PromptCardProps
   );
 }
 
+interface PatentApiConfigCardProps {
+  staticConfig: PatentAgentStaticConfig;
+  customParams: Record<string, unknown>;
+  onStaticConfigChange: (updates: Partial<PatentAgentStaticConfig>) => Promise<void>;
+  onCustomParamChange: (key: keyof PatentAgentCustomParams, value: string) => Promise<void>;
+}
+
+function PatentApiConfigCard({
+  staticConfig,
+  customParams,
+  onStaticConfigChange,
+  onCustomParamChange,
+}: PatentApiConfigCardProps) {
+  const typedCustom = customParams as PatentAgentCustomParams;
+
+  return (
+    <Card className="border-border/70">
+      <CardHeader className="px-4 pt-4 pb-2 sm:px-5 sm:pt-5">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileSearchIcon className="size-4" />
+          专利 API 配置
+        </CardTitle>
+        <CardDescription>
+          配置开放专利数据源与鉴权参数。当前优先支持 PatentsView。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
+        <div className="space-y-2">
+          <Label htmlFor="patent-provider">数据源</Label>
+          <Select
+            value={staticConfig.provider}
+            onValueChange={(value) => void onStaticConfigChange({ provider: value as PatentApiProvider })}
+          >
+            <SelectTrigger id="patent-provider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PATENT_PROVIDER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <div className="space-y-0.5">
+                    <div>{option.label}</div>
+                    <div className="text-xs text-muted-foreground">{option.description}</div>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="patent-lookback">默认时间窗口</Label>
+            <Select
+              value={String(staticConfig.defaultLookbackMonths)}
+              onValueChange={(value) =>
+                void onStaticConfigChange({ defaultLookbackMonths: Number(value) })}
+            >
+              <SelectTrigger id="patent-lookback">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PATENT_LOOKBACK_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={String(option.value)}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="patent-max-results">默认返回条数</Label>
+            <Select
+              value={String(staticConfig.maxResultsPerRequest)}
+              onValueChange={(value) =>
+                void onStaticConfigChange({ maxResultsPerRequest: Number(value) })}
+            >
+              <SelectTrigger id="patent-max-results">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PATENT_MAX_RESULTS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={String(option.value)}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="patent-sort">默认排序</Label>
+            <Select
+              value={staticConfig.defaultSortBy}
+              onValueChange={(value) => void onStaticConfigChange({ defaultSortBy: value as PatentSortBy })}
+            >
+              <SelectTrigger id="patent-sort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PATENT_SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="patent-timeout">请求超时 (ms)</Label>
+            <Input
+              id="patent-timeout"
+              type="number"
+              value={String(staticConfig.requestTimeoutMs)}
+              min={1000}
+              step={500}
+              onChange={(event) =>
+                void onStaticConfigChange({ requestTimeoutMs: Number(event.target.value) || 15000 })}
+            />
+          </div>
+        </div>
+
+        {staticConfig.provider === "patentsview" && (
+          <div className="space-y-3 rounded-xl border bg-muted/25 p-3">
+            <Badge variant="outline">PatentsView</Badge>
+            <div className="space-y-2">
+              <Label htmlFor="patentsview-api-key">X-Api-Key</Label>
+              <Input
+                id="patentsview-api-key"
+                type="password"
+                value={typedCustom.patentsViewApiKey || ""}
+                onChange={(event) => void onCustomParamChange("patentsViewApiKey", event.target.value)}
+                placeholder="输入 PatentsView API Key"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patentsview-base-url">Base URL</Label>
+              <Input
+                id="patentsview-base-url"
+                value={typedCustom.patentsViewBaseUrl || "https://search.patentsview.org/api/v1"}
+                onChange={(event) => void onCustomParamChange("patentsViewBaseUrl", event.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {staticConfig.provider === "epo-ops" && (
+          <div className="space-y-3 rounded-xl border bg-muted/25 p-3">
+            <Badge variant="outline">EPO OPS</Badge>
+            <div className="space-y-2">
+              <Label htmlFor="epo-key">Consumer Key</Label>
+              <Input
+                id="epo-key"
+                value={typedCustom.epoConsumerKey || ""}
+                onChange={(event) => void onCustomParamChange("epoConsumerKey", event.target.value)}
+                placeholder="输入 EPO Consumer Key"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="epo-secret">Consumer Secret</Label>
+              <Input
+                id="epo-secret"
+                type="password"
+                value={typedCustom.epoConsumerSecret || ""}
+                onChange={(event) => void onCustomParamChange("epoConsumerSecret", event.target.value)}
+                placeholder="输入 EPO Consumer Secret"
+              />
+            </div>
+          </div>
+        )}
+
+        {staticConfig.provider === "uspto-assignment" && (
+          <div className="space-y-3 rounded-xl border bg-muted/25 p-3">
+            <Badge variant="outline">USPTO</Badge>
+            <div className="space-y-2">
+              <Label htmlFor="uspto-key">API Key (可选)</Label>
+              <Input
+                id="uspto-key"
+                value={typedCustom.usptoApiKey || ""}
+                onChange={(event) => void onCustomParamChange("usptoApiKey", event.target.value)}
+                placeholder="如服务要求可填写"
+              />
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function readToolSelectionConfigured(customParams: Record<string, unknown>): boolean {
   return customParams.toolSelectionConfigured === true;
 }
@@ -203,14 +414,26 @@ export function AgentSettings() {
     agentId: "master",
     defaultStaticConfig: DEFAULT_MASTER_STATIC_CONFIG,
   });
+  const patentConfigState = useAgentConfig<PatentAgentStaticConfig>({
+    agentId: "patent",
+    defaultStaticConfig: DEFAULT_PATENT_STATIC_CONFIG,
+  });
 
-  const activeState = activeAgentId === "star" ? starConfigState : masterConfigState;
+  const activeState = activeAgentId === "star"
+    ? starConfigState
+    : (activeAgentId === "master" ? masterConfigState : patentConfigState);
+
   const activeAgent = useMemo(
     () => AGENTS.find((agent) => agent.id === activeAgentId) || AGENTS[0],
     [activeAgentId]
   );
 
-  if (starConfigState.isLoading || masterConfigState.isLoading || !activeState.config) {
+  if (
+    starConfigState.isLoading
+    || masterConfigState.isLoading
+    || patentConfigState.isLoading
+    || !activeState.config
+  ) {
     return (
       <SettingsSectionShell
         title="Agent"
@@ -234,6 +457,7 @@ export function AgentSettings() {
       },
     });
   };
+
   const handleFetchModeChange = (mode: string) => {
     if (activeAgentId === "star") {
       void starConfigState.updateStaticConfig({ fetchMode: mode as StarFetchMode });
@@ -241,6 +465,7 @@ export function AgentSettings() {
     }
     void masterConfigState.updateStaticConfig({ fetchMode: mode as MasterFetchMode });
   };
+
   const handleFetchIntervalChange = (minutes: number) => {
     if (activeAgentId === "star") {
       void starConfigState.updateStaticConfig({ fetchIntervalMinutes: minutes });
@@ -248,12 +473,26 @@ export function AgentSettings() {
     }
     void masterConfigState.updateStaticConfig({ fetchIntervalMinutes: minutes });
   };
+
   const handleBackgroundRefreshChange = (enabled: boolean) => {
     if (activeAgentId === "star") {
       void starConfigState.updateStaticConfig({ backgroundRefresh: enabled });
       return;
     }
     void masterConfigState.updateStaticConfig({ backgroundRefresh: enabled });
+  };
+
+  const handlePatentCustomParamChange = async (
+    key: keyof PatentAgentCustomParams,
+    value: string
+  ) => {
+    const currentParams = patentConfigState.config?.dynamicConfig.customParams || {};
+    await patentConfigState.updateDynamicConfig({
+      customParams: {
+        ...currentParams,
+        [key]: value,
+      },
+    });
   };
 
   return (
@@ -283,36 +522,60 @@ export function AgentSettings() {
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-2">
-              <RepositorySyncCard
-                idPrefix={activeAgentId}
-                title="仓库同步策略"
-                description="控制仓库数据获取时机与后台刷新行为。"
-                fetchMode={staticConfig.fetchMode}
-                fetchModeOptions={
-                  activeAgentId === "star" ? STAR_FETCH_MODE_OPTIONS : MASTER_FETCH_MODE_OPTIONS
-                }
-                fetchIntervalMinutes={staticConfig.fetchIntervalMinutes}
-                fetchIntervalOptions={
-                  activeAgentId === "star"
-                    ? STAR_FETCH_INTERVAL_OPTIONS
-                    : MASTER_FETCH_INTERVAL_OPTIONS
-                }
-                backgroundRefresh={staticConfig.backgroundRefresh}
-                lastFetchedAt={staticConfig.lastFetchedAt}
-                onFetchModeChange={handleFetchModeChange}
-                onFetchIntervalChange={handleFetchIntervalChange}
-                onBackgroundRefreshChange={handleBackgroundRefreshChange}
-              />
+            {activeAgentId === "patent"
+              ? (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <PatentApiConfigCard
+                      staticConfig={staticConfig as PatentAgentStaticConfig}
+                      customParams={dynamicConfig.customParams}
+                      onStaticConfigChange={async (updates) =>
+                        patentConfigState.updateStaticConfig(updates)}
+                      onCustomParamChange={handlePatentCustomParamChange}
+                    />
 
-              <PromptCard
-                id={`${activeAgentId}-additional-prompt`}
-                title="提示词增强"
-                description="附加到默认系统提示词末尾，用于微调 Agent 行为。"
-                value={dynamicConfig.additionalSystemPrompt}
-                onChange={(value) => void activeState.updateDynamicConfig({ additionalSystemPrompt: value })}
-              />
-            </div>
+                    <PromptCard
+                      id={`${activeAgentId}-additional-prompt`}
+                      title="提示词增强"
+                      description="附加到默认系统提示词末尾，用于微调 Agent 行为。"
+                      value={dynamicConfig.additionalSystemPrompt}
+                      onChange={(value) =>
+                        void activeState.updateDynamicConfig({ additionalSystemPrompt: value })}
+                    />
+                  </div>
+                )
+              : (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <RepositorySyncCard
+                      idPrefix={activeAgentId}
+                      title="仓库同步策略"
+                      description="控制仓库数据获取时机与后台刷新行为。"
+                      fetchMode={(staticConfig as StarAgentStaticConfig | MasterAgentStaticConfig).fetchMode}
+                      fetchModeOptions={
+                        activeAgentId === "star" ? STAR_FETCH_MODE_OPTIONS : MASTER_FETCH_MODE_OPTIONS
+                      }
+                      fetchIntervalMinutes={(staticConfig as StarAgentStaticConfig | MasterAgentStaticConfig).fetchIntervalMinutes}
+                      fetchIntervalOptions={
+                        activeAgentId === "star"
+                          ? STAR_FETCH_INTERVAL_OPTIONS
+                          : MASTER_FETCH_INTERVAL_OPTIONS
+                      }
+                      backgroundRefresh={(staticConfig as StarAgentStaticConfig | MasterAgentStaticConfig).backgroundRefresh}
+                      lastFetchedAt={(staticConfig as StarAgentStaticConfig | MasterAgentStaticConfig).lastFetchedAt}
+                      onFetchModeChange={handleFetchModeChange}
+                      onFetchIntervalChange={handleFetchIntervalChange}
+                      onBackgroundRefreshChange={handleBackgroundRefreshChange}
+                    />
+
+                    <PromptCard
+                      id={`${activeAgentId}-additional-prompt`}
+                      title="提示词增强"
+                      description="附加到默认系统提示词末尾，用于微调 Agent 行为。"
+                      value={dynamicConfig.additionalSystemPrompt}
+                      onChange={(value) =>
+                        void activeState.updateDynamicConfig({ additionalSystemPrompt: value })}
+                    />
+                  </div>
+                )}
 
             <AgentToolCenter
               agentId={activeAgentId}
@@ -326,3 +589,5 @@ export function AgentSettings() {
     </SettingsSectionShell>
   );
 }
+
+
