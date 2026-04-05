@@ -1,5 +1,5 @@
 import type { PatentRuntimeConfig } from "./static-config";
-import { createAnalyzePatentTrendsTool, createSearchPatentsTool } from "./tools";
+import { createAnalyzePatentTrendsTool, createSearchPatentsTool } from "./tools/index";
 
 export function createPatentTools(runtimeConfig: PatentRuntimeConfig) {
   return {

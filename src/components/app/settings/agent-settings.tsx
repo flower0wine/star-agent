@@ -32,10 +32,13 @@ import type {
   PatentApiProvider,
   PatentSortBy,
 } from "@/agents/patent/static-config";
+import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
+import { parseSubAgentProfiles } from "@/lib/agents/sub-agent/profile-schema";
 import { SettingsSectionShell } from "./settings-section-shell";
 import { AgentSettingsSidebar } from "./agent-settings/agent-settings-sidebar";
-import type { AgentSidebarItem } from "./agent-settings/agent-settings-sidebar";
+import type { AgentPanelType, AgentSidebarItem } from "./agent-settings/agent-settings-sidebar";
 import { AgentToolCenter } from "./agent-settings/agent-tool-center";
+import { SubAgentProfileCenter } from "./agent-settings/subagent-profile-center";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -54,6 +57,7 @@ dayjs.extend(relativeTime);
 dayjs.locale("zh-cn");
 
 type AgentId = "star" | "master" | "patent";
+const DEFAULT_SUBAGENT_STATIC_CONFIG: Record<string, unknown> = {};
 
 const AGENTS: AgentSidebarItem[] = [
   {
@@ -403,8 +407,17 @@ function readToolSelectionConfigured(customParams: Record<string, unknown>): boo
   return customParams.toolSelectionConfigured === true;
 }
 
+function readSubAgentProfiles(customParams: Record<string, unknown>): SubAgentProfile[] {
+  try {
+    return parseSubAgentProfiles(customParams.subAgentProfiles);
+  } catch {
+    return [];
+  }
+}
+
 export function AgentSettings() {
   const [activeAgentId, setActiveAgentId] = useState<AgentId>("star");
+  const [activePanel, setActivePanel] = useState<AgentPanelType>("agents");
 
   const starConfigState = useAgentConfig<StarAgentStaticConfig>({
     agentId: "star",
@@ -417,6 +430,10 @@ export function AgentSettings() {
   const patentConfigState = useAgentConfig<PatentAgentStaticConfig>({
     agentId: "patent",
     defaultStaticConfig: DEFAULT_PATENT_STATIC_CONFIG,
+  });
+  const subAgentConfigState = useAgentConfig<Record<string, unknown>>({
+    agentId: "subagent",
+    defaultStaticConfig: DEFAULT_SUBAGENT_STATIC_CONFIG,
   });
 
   const activeState = activeAgentId === "star"
@@ -432,7 +449,9 @@ export function AgentSettings() {
     starConfigState.isLoading
     || masterConfigState.isLoading
     || patentConfigState.isLoading
+    || subAgentConfigState.isLoading
     || !activeState.config
+    || !subAgentConfigState.config
   ) {
     return (
       <SettingsSectionShell
@@ -447,6 +466,8 @@ export function AgentSettings() {
 
   const { dynamicConfig, staticConfig } = activeState.config;
   const hasToolSelectionConfigured = readToolSelectionConfigured(dynamicConfig.customParams);
+  const subAgentProfiles = readSubAgentProfiles(subAgentConfigState.config.dynamicConfig.customParams);
+  const activeSubAgentProfiles = subAgentProfiles.filter(profile => profile.parentAgentIds.includes(activeAgentId));
 
   const handleToolChange = async (tools: string[]) => {
     await activeState.updateDynamicConfig({
@@ -495,6 +516,18 @@ export function AgentSettings() {
     });
   };
 
+  const handleSubAgentProfilesChange = async (profiles: SubAgentProfile[]) => {
+    const currentCustomParams = subAgentConfigState.config?.dynamicConfig.customParams || {};
+    const allProfiles = readSubAgentProfiles(currentCustomParams);
+    const untouchedProfiles = allProfiles.filter(profile => !profile.parentAgentIds.includes(activeAgentId));
+    await subAgentConfigState.updateDynamicConfig({
+      customParams: {
+        ...currentCustomParams,
+        subAgentProfiles: [...untouchedProfiles, ...profiles],
+      },
+    });
+  };
+
   return (
     <SettingsSectionShell
       title="Agent"
@@ -506,7 +539,11 @@ export function AgentSettings() {
           <AgentSettingsSidebar
             items={AGENTS}
             activeAgentId={activeAgentId}
-            onSelect={(id) => setActiveAgentId(id as AgentId)}
+            activePanel={activePanel}
+            onSelect={(panel, id) => {
+              setActivePanel(panel);
+              setActiveAgentId(id as AgentId);
+            }}
           />
 
           <div className="h-full min-h-0 space-y-4 overflow-y-auto pr-1 lg:space-y-5">
@@ -522,7 +559,7 @@ export function AgentSettings() {
               </div>
             </div>
 
-            {activeAgentId === "patent"
+            {activePanel === "agents" && (activeAgentId === "patent"
               ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <PatentApiConfigCard
@@ -575,14 +612,24 @@ export function AgentSettings() {
                         void activeState.updateDynamicConfig({ additionalSystemPrompt: value })}
                     />
                   </div>
-                )}
+                ))}
 
-            <AgentToolCenter
-              agentId={activeAgentId}
-              enabledTools={dynamicConfig.enabledTools}
-              hasExplicitSelection={hasToolSelectionConfigured}
-              onChange={(tools) => void handleToolChange(tools)}
-            />
+            {activePanel === "agents" && (
+              <AgentToolCenter
+                agentId={activeAgentId}
+                enabledTools={dynamicConfig.enabledTools}
+                hasExplicitSelection={hasToolSelectionConfigured}
+                onChange={(tools) => void handleToolChange(tools)}
+              />
+            )}
+
+            {activePanel === "subagents" && (
+              <SubAgentProfileCenter
+                defaultParentAgentId={activeAgentId}
+                profiles={activeSubAgentProfiles}
+                onChange={(profiles) => void handleSubAgentProfilesChange(profiles)}
+              />
+            )}
           </div>
         </div>
       </div>

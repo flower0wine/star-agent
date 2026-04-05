@@ -26,6 +26,8 @@ export interface ToolMeta {
   defaultEnabledAgentIds: string[];
   /** 是否为核心工具（仅标记，不做强制限制） */
   isCore?: boolean;
+  /** 是否支持 sub-agent runtime 动态装配 */
+  subAgentCompatible?: boolean;
 }
 
 /**
@@ -68,6 +70,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     agentIds: ["star"],
     defaultEnabledAgentIds: ["star"],
     isCore: true,
+    subAgentCompatible: true,
   },
   {
     id: "displayRepositories",
@@ -77,6 +80,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     agentIds: ["star", "master"],
     defaultEnabledAgentIds: ["star", "master"],
     isCore: true,
+    subAgentCompatible: true,
   },
   {
     id: "getRepositoryReadme",
@@ -85,6 +89,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     category: "info",
     agentIds: ["star"],
     defaultEnabledAgentIds: ["star"],
+    subAgentCompatible: true,
   },
   {
     id: "getAllRepos",
@@ -94,6 +99,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     agentIds: ["master"],
     defaultEnabledAgentIds: ["master"],
     isCore: true,
+    subAgentCompatible: true,
   },
   {
     id: "createSubAgent",
@@ -103,6 +109,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     agentIds: ["master"],
     defaultEnabledAgentIds: ["master"],
     isCore: true,
+    subAgentCompatible: false,
   },
   {
     id: "searchPatents",
@@ -112,6 +119,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     agentIds: ["patent"],
     defaultEnabledAgentIds: ["patent"],
     isCore: true,
+    subAgentCompatible: false,
   },
   {
     id: "analyzePatentTrends",
@@ -121,6 +129,7 @@ export const TOOL_CATALOG: ToolMeta[] = [
     agentIds: ["patent"],
     defaultEnabledAgentIds: ["patent"],
     isCore: true,
+    subAgentCompatible: false,
   },
 ];
 
@@ -140,6 +149,13 @@ export function getAgentTools(agentId: string): ToolMeta[] {
  */
 export function getAllTools(): ToolMeta[] {
   return TOOL_CATALOG;
+}
+
+/**
+ * 获取支持 sub-agent 的工具目录
+ */
+export function getSubAgentCompatibleTools(): ToolMeta[] {
+  return TOOL_CATALOG.filter(tool => tool.subAgentCompatible);
 }
 
 /**

@@ -68,7 +68,13 @@ export function buildSubAgentHistoryState(
       }
       const p = part as Record<string, unknown>;
 
-      if (p.type === "tool-createSubAgent") {
+      const isToolCall = typeof p.type === "string" && p.type.startsWith("tool-");
+      const toolOutput = p.output && typeof p.output === "object"
+        ? p.output as Record<string, unknown>
+        : undefined;
+      const hasSubAgentMetadata = Boolean(toolOutput?.subAgent && typeof toolOutput.subAgent === "object");
+
+      if (isToolCall && hasSubAgentMetadata) {
         const output = (p.output && typeof p.output === "object")
           ? p.output as Record<string, unknown>
           : undefined;
@@ -97,7 +103,8 @@ export function buildSubAgentHistoryState(
       if (p.type === "tool-result" && p.result && typeof p.result === "object") {
         const result = p.result as Record<string, unknown>;
         const taskId = typeof result.taskId === "string" ? result.taskId : undefined;
-        if (!taskId || !taskId.startsWith("subagent-")) {
+        const subAgent = result.subAgent;
+        if (!taskId || !subAgent || typeof subAgent !== "object") {
           continue;
         }
         const status: SubAgentMessageSnapshot["status"] = isChatLoading && message.id === lastMessageId

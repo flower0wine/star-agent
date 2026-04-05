@@ -59,7 +59,7 @@ export async function handleMasterAgent(
   const agentConfig: AgentConfigPayload = body.agentConfig || {};
 
   // Create Master Agent with repos and model
-  const masterAgent = createMasterAgent(finalRepos, username);
+  const masterAgent = createMasterAgent(finalRepos, username, agentConfig.customParams);
 
   // Get tools and system prompt from agent
   let tools = masterAgent.getTools({ requestId });

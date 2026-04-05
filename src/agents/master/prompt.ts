@@ -28,7 +28,9 @@ export function getMasterSystemPrompt(context: MasterAgentContext): string {
 # 任务
 
 - 当仓库数量少于等于 200 个时，你应当直接处理用户请求，调用 getAllRepos 工具获取所有仓库，然后自行分析并回答用户问题。
-- 当仓库数量超过 200 个时，你需要将仓库列表均匀分配给多个子 Agent（每个子 Agent 处理不超过 200 个仓库），然后汇总各子 Agent 的结果回答用户。
+- 当仓库数量超过 200 个时，你需要基于已配置的子 Agent profile 和模板来分配任务。
+- 创建子 Agent 时只能调用 createSubAgent(profileId, templateId, templateVars, payloadRef)，禁止自由编写子 Agent 任务文本。
+- 如果缺少可用 profile 或模板，先询问用户补充配置。
 - subAgent 需要一定的时间才能处理完成，你在分配任务之后可以退出，subAgent 完成之后会通知你。
 
 # 约束

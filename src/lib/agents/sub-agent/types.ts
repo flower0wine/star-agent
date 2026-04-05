@@ -7,6 +7,54 @@
 import type { UIMessage } from "ai";
 import type { GitHubRepo } from "@/lib/github/api";
 
+export type TemplateVariableType = "string" | "number" | "boolean";
+
+export interface SubAgentVarDef {
+  type: TemplateVariableType;
+  required?: boolean;
+  defaultValue?: string | number | boolean;
+  description?: string;
+}
+
+export interface SubAgentTaskTemplate {
+  id: string;
+  name: string;
+  instructionTemplate: string;
+  requiredVars: string[];
+  allowedVars: string[];
+}
+
+export interface SubAgentProfile {
+  id: string;
+  name: string;
+  enabled: boolean;
+  parentAgentIds: string[];
+  toolIds: string[];
+  systemPromptTemplate: string;
+  templates: SubAgentTaskTemplate[];
+  varSchema: Record<string, SubAgentVarDef>;
+  limits: {
+    maxConcurrency: number;
+    timeoutMs: number;
+    maxInputItems?: number;
+  };
+  version: number;
+}
+
+export type SubAgentPayloadType = "repos-range" | "repos-list" | "custom";
+
+export interface SubAgentPayloadRef {
+  type: SubAgentPayloadType;
+  data: unknown;
+}
+
+export interface SubAgentMetadata {
+  profileId: string;
+  templateId: string;
+  profileVersion: number;
+  originTool: string;
+}
+
 /**
  * Sub-agent task status
  */
@@ -23,6 +71,24 @@ export interface SubAgentTask {
   parentId: string;
   /** Task description */
   task: string;
+  /** Parent agent id */
+  parentAgentId: string;
+  /** Selected profile id */
+  profileId: string;
+  /** Selected template id */
+  templateId: string;
+  /** Profile version snapshot */
+  profileVersion: number;
+  /** Origin tool name */
+  originTool: string;
+  /** Runtime payload reference */
+  payloadRef?: SubAgentPayloadRef;
+  /** Variable snapshot for template rendering */
+  templateVars: Record<string, string | number | boolean>;
+  /** Profile snapshot for deterministic execution */
+  profileSnapshot: SubAgentProfile;
+  /** Template snapshot for deterministic execution */
+  templateSnapshot: SubAgentTaskTemplate;
   /** Repository list to process */
   repos: GitHubRepo[];
   /** GitHub username */
@@ -76,6 +142,8 @@ export interface SubAgentProgress {
   error?: string;
   /** Final result (when complete) */
   result?: string;
+  /** Sub-agent metadata for generic UI rendering */
+  subAgent?: SubAgentMetadata;
 }
 
 /**
@@ -98,4 +166,5 @@ export interface CreateSubAgentTaskOutput {
   message: string;
   reposCount: number;
   async: true;
+  subAgent: SubAgentMetadata;
 }

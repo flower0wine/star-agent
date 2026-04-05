@@ -99,6 +99,12 @@ export class SubAgentManager {
       message: `子 Agent 已启动 (ID: ${id.slice(0, 12)}...), 正在处理 ${input.repos.length} 个仓库`,
       reposCount: input.repos.length,
       async: true as const,
+      subAgent: {
+        profileId: input.profileId,
+        templateId: input.templateId,
+        profileVersion: input.profileVersion,
+        originTool: input.originTool,
+      },
     };
   }
 
@@ -116,6 +122,12 @@ export class SubAgentManager {
       taskId: task.id,
       type: "start",
       progress: 0,
+      subAgent: {
+        profileId: task.profileId,
+        templateId: task.templateId,
+        profileVersion: task.profileVersion,
+        originTool: task.originTool,
+      },
     });
 
     try {
@@ -135,6 +147,12 @@ export class SubAgentManager {
         type: "complete",
         progress: 100,
         result: task.result,
+        subAgent: {
+          profileId: task.profileId,
+          templateId: task.templateId,
+          profileVersion: task.profileVersion,
+          originTool: task.originTool,
+        },
       });
     } catch (error) {
       task.status = "failed";
@@ -146,6 +164,12 @@ export class SubAgentManager {
         type: "error",
         error: task.error,
         progress: task.progress,
+        subAgent: {
+          profileId: task.profileId,
+          templateId: task.templateId,
+          profileVersion: task.profileVersion,
+          originTool: task.originTool,
+        },
       });
     } finally {
       this.abortControllers.delete(task.id);

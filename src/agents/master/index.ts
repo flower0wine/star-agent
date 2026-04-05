@@ -7,7 +7,6 @@
 
 import type { AgentConfig } from "@/lib/agents/registry";
 import type { GitHubRepo } from "@/lib/github/api";
-import { formatReposForInitialContext } from "@/lib/github/utils";
 import { masterAgent } from "./config";
 import { getMasterSystemPrompt } from "./prompt";
 import type { MasterAgentContext } from "./prompt";
@@ -18,13 +17,14 @@ import { createDisplayRepositoriesTool } from "../star/tools/display-repositorie
  * Create Master Agent configuration
  *
  * @param repos - GitHub repositories (for getAllRepos tool)
- * @param model - Model instance (for creating sub-agents)
  * @param username - GitHub username
+ * @param customParams - User dynamic custom params
  * @returns Agent configuration for registry
  */
 export function createMasterAgent(
   repos: GitHubRepo[],
-  username: string
+  username: string,
+  customParams?: Record<string, unknown>
 ): AgentConfig {
   return {
     id: masterAgent.id,
@@ -38,12 +38,18 @@ export function createMasterAgent(
 
       return {
         getAllRepos: createGetAllReposTool(repos),
-        createSubAgent: createCreateSubAgentTool(repos, username, sessionId),
+        createSubAgent: createCreateSubAgentTool(
+          repos,
+          username,
+          sessionId,
+          masterAgent.id,
+          customParams
+        ),
         displayRepositories: createDisplayRepositoriesTool(repos),
       };
     },
 
-    getSystemPrompt: (context: Record<string, unknown>) => {
+    getSystemPrompt: () => {
       const masterContext: MasterAgentContext = {
         username,
         reposCount: repos.length,

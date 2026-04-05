@@ -108,12 +108,34 @@ interface CreateSubAgentToolOutput {
   message?: string;
   async?: true;
   __duration?: number;
+  subAgent?: {
+    profileId?: string;
+    templateId?: string;
+    profileVersion?: number;
+    originTool?: string;
+  };
 }
 
 interface CreateSubAgentToolInput {
-  task?: string;
-  startIndex?: number;
-  endIndex?: number;
+  profileId?: string;
+  templateId?: string;
+  templateVars?: Record<string, unknown>;
+  payloadRef?: {
+    type?: string;
+    data?: unknown;
+  };
+}
+
+function isSubAgentToolPart(part: Record<string, unknown>): boolean {
+  if (!("type" in part) || typeof part.type !== "string" || !part.type.startsWith("tool-")) {
+    return false;
+  }
+
+  const output = part.output;
+  if (!output || typeof output !== "object") {
+    return false;
+  }
+  return "subAgent" in (output as Record<string, unknown>);
 }
 
 /**
@@ -186,10 +208,11 @@ export const MessageRenderer = memo(({
       }
 
       // 3. Display Repositories Tool - 专门的 UI 展示工具 (支持渐进式加载)
-      if (part.type === "tool-createSubAgent") {
+      if (isSubAgentToolPart(part as unknown as Record<string, unknown>)) {
+        const toolType = typeof part.type === "string" ? part.type : "tool-subAgent";
         if (part.state === "input-streaming") {
           return (
-            <div key={`tool-createSubAgent-${i}`} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-muted-foreground text-sm">
+            <div key={`${toolType}-${i}`} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-muted-foreground text-sm">
               <LoaderIcon className="size-4 animate-spin" />
               正在创建子 Agent...
             </div>
@@ -200,6 +223,9 @@ export const MessageRenderer = memo(({
           const output = (part.output || {}) as CreateSubAgentToolOutput;
           const input = (part.input || {}) as CreateSubAgentToolInput;
           const taskId = output.taskId;
+          const subAgentLabel = [output.subAgent?.profileId, output.subAgent?.templateId]
+            .filter(Boolean)
+            .join(" / ");
           const canOpen = Boolean(taskId && onOpenSubAgentPanel);
 
           const body = (
@@ -220,15 +246,22 @@ export const MessageRenderer = memo(({
                   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 )}
               </div>
-              {input.task && (
+              {(input.profileId || input.templateId) && (
                 <div className="mt-2 rounded-md bg-background/70 px-2 py-1.5 text-xs text-foreground/90">
-                  <span className="font-medium">任务:</span> {input.task}
+                  <span className="font-medium">Profile:</span> {input.profileId}
+                  {" · "}
+                  <span className="font-medium">Template:</span> {input.templateId}
                 </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                {typeof input.startIndex === "number" && typeof input.endIndex === "number" && (
+                {input.payloadRef?.type && (
                   <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
-                    range {input.startIndex}..{input.endIndex}
+                    payload: {input.payloadRef.type}
+                  </span>
+                )}
+                {subAgentLabel && (
+                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    {subAgentLabel}
                   </span>
                 )}
                 {taskId && (
@@ -255,12 +288,12 @@ export const MessageRenderer = memo(({
           if (canOpen && taskId) {
             return (
               <button
-                key={`tool-createSubAgent-${i}`}
+                key={`${toolType}-${i}`}
                 type="button"
                 className="block w-full"
                 onClick={() => onOpenSubAgentPanel?.({
                   taskId,
-                  task: input.task,
+                  task: subAgentLabel,
                 })}
               >
                 {body}
@@ -268,12 +301,12 @@ export const MessageRenderer = memo(({
             );
           }
 
-          return <div key={`tool-createSubAgent-${i}`}>{body}</div>;
+          return <div key={`${toolType}-${i}`}>{body}</div>;
         }
 
         if (part.state === "output-error") {
           return (
-            <div key={`tool-createSubAgent-${i}`} className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
+            <div key={`${toolType}-${i}`} className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
               创建子 Agent 失败: {part.errorText}
             </div>
           );

@@ -84,6 +84,7 @@ interface PendingRouteMessagePayload {
 }
 
 const PendingRouteMessageStorageKey = "star-agent:pending-route-message";
+const DEFAULT_SUBAGENT_STATIC_CONFIG: Record<string, unknown> = {};
 
 function readToolSelectionConfigured(customParams: Record<string, unknown>): boolean {
   return customParams.toolSelectionConfigured === true;
@@ -134,6 +135,10 @@ export function ChatView({
   const { config: patentAgentConfig } = useAgentConfig<PatentAgentStaticConfig>({
     agentId: "patent",
     defaultStaticConfig: DEFAULT_PATENT_STATIC_CONFIG,
+  });
+  const { config: subAgentConfig } = useAgentConfig<Record<string, unknown>>({
+    agentId: "subagent",
+    defaultStaticConfig: DEFAULT_SUBAGENT_STATIC_CONFIG,
   });
 
   // Agent selection - 使用初始值，但允许用户切换
@@ -216,6 +221,7 @@ export function ChatView({
   const hasToolSelectionConfigured = selectedAgentConfig
     ? readToolSelectionConfigured(selectedAgentConfig.dynamicConfig.customParams)
     : false;
+  const subAgentProfiles = subAgentConfig?.dynamicConfig.customParams?.subAgentProfiles;
   const agentRuntimeConfig = selectedAgentConfig
     ? {
         additionalSystemPrompt: selectedAgentConfig.dynamicConfig.additionalSystemPrompt || undefined,
@@ -226,6 +232,13 @@ export function ChatView({
         staticParams: selectedAgentConfig.staticConfig as Record<string, unknown>,
       }
     : undefined;
+
+  if (agentRuntimeConfig && subAgentProfiles) {
+    agentRuntimeConfig.customParams = {
+      ...agentRuntimeConfig.customParams,
+      subAgentProfiles,
+    };
+  }
 
   const {
     messages,

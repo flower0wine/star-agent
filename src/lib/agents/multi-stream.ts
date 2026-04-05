@@ -72,6 +72,14 @@ export async function createMultiStreamResponse(
         }
         const task = subManager.getTask(progress.taskId);
         const taskText = task?.task;
+        const subAgent = progress.subAgent || (task
+          ? {
+              profileId: task.profileId,
+              templateId: task.templateId,
+              profileVersion: task.profileVersion,
+              originTool: task.originTool,
+            }
+          : undefined);
 
         // Register sub-agent with orchestrator
         if (progress.type === "start") {
@@ -95,6 +103,7 @@ export async function createMultiStreamResponse(
               progressType: progress.type,
               chunk: progress.chunk,
               progress: progress.progress,
+              subAgent,
             },
           });
           return;
@@ -114,6 +123,7 @@ export async function createMultiStreamResponse(
             progress: progress.progress,
             error: progress.error,
             result: progress.result,
+            subAgent,
           },
         });
       };

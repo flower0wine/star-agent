@@ -7,10 +7,9 @@
 import { ToolLoopAgent, createAgentUIStream } from "ai";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 import type { GitHubRepo } from "@/lib/github/api";
-import type { ModelInstance } from "@/app/api/chat/model";
 import type { SubAgentTask, SubAgentProgress } from "./types";
-import { createSearchRepositoriesTool } from "@/agents/star/tools/search-repository";
-import { createGetRepositoryReadmeTool } from "@/agents/star/tools/get-readme";
+import { createSubAgentTools } from "./tool-factory";
+import { renderTemplate } from "./template-renderer";
 
 /**
  * Format repos for sub-agent context
@@ -33,50 +32,15 @@ function formatReposForContext(repos: GitHubRepo[]): string {
 /**
  * Get sub-agent system prompt
  */
-function getSubAgentSystemPrompt(
-  repos: GitHubRepo[],
-  username: string
-): string {
-  const reposContext = formatReposForContext(repos);
-
-  return `
-你是一个热情且能力较强的助手，擅长使用工具帮助用户解决问题，遇到非常模糊的问题会主动询问用户。
-
-# 用户信息
-- GitHub 用户名: ${username}
-- 仓库总数: ${repos.length} 个
-
-# 用户仓库列表（完整）
-以下是用户的完整仓库列表，请先阅读这些信息，这对你回答问题非常重要：
-
-${reposContext}
-
-# 工作职责
-
-- 获取他们的星标仓库列表，并帮助他们找到想要的内容。
-- 通过提问澄清需求，缩小搜索范围。
-- 以清晰有条理的方式展示相关的仓库信息。
-- 每个仓库需要给出与用户想找的仓库的关联分数，只给出关联分数超过 0.7 的仓库。
-
-# 约束
-
-- 当你找到匹配的仓库时，直接将你选择的结果输出，不要输出其他的内容。
-
-# 注意事项
-
-- 如果用户未提供用户名，询问用户的 GitHub 用户名。
-- 始终保持友好、对话式的沟通风格。以清晰、有组织的方式呈现仓库信息。
-`.trim();
-}
-
-/**
- * Create sub-agent tools
- */
-function createSubAgentTools(repos: GitHubRepo[]) {
-  return {
-    searchRepositories: createSearchRepositoriesTool(repos),
-    getRepositoryReadme: createGetRepositoryReadmeTool(repos),
+function buildSubAgentSystemPrompt(task: SubAgentTask): string {
+  const reposContext = formatReposForContext(task.repos);
+  const vars: Record<string, string | number | boolean> = {
+    ...task.templateVars,
+    username: task.username,
+    repos_count: task.repos.length,
+    repos_context: reposContext,
   };
+  return renderTemplate(task.profileSnapshot.systemPromptTemplate, vars);
 }
 
 /**
@@ -101,11 +65,13 @@ export async function executeSubAgentTask(
   console.log(`[Executor/${task.id}] Model obtained`);
 
   // Create tools
-  const subAgentTools = createSubAgentTools(task.repos);
+  const subAgentTools = createSubAgentTools(task.profileSnapshot.toolIds, {
+    repos: task.repos,
+  });
   console.log(`[Executor/${task.id}] Tools created: ${Object.keys(subAgentTools).join(", ")}`);
 
   // Get system prompt
-  const systemPrompt = getSubAgentSystemPrompt(task.repos, task.username);
+  const systemPrompt = buildSubAgentSystemPrompt(task);
   console.log(`[Executor/${task.id}] System prompt length: ${systemPrompt.length}`);
 
   // Create ToolLoopAgent
@@ -121,7 +87,7 @@ export async function executeSubAgentTask(
   let lastProgressEmitAt = 0;
 
   // Add timeout to prevent hanging
-  const timeoutMs = 120000; // 2 minutes timeout
+  const timeoutMs = task.profileSnapshot.limits.timeoutMs;
 
   try {
     console.log(`[Executor/${task.id}] Creating agent UI stream...`);
@@ -177,6 +143,12 @@ export async function executeSubAgentTask(
           taskId: task.id,
           type: "message-chunk",
           chunk: chunkObj,
+          subAgent: {
+            profileId: task.profileId,
+            templateId: task.templateId,
+            profileVersion: task.profileVersion,
+            originTool: task.originTool,
+          },
         });
 
         // Track progress for progress indicator
@@ -195,6 +167,12 @@ export async function executeSubAgentTask(
                 taskId: task.id,
                 type: "progress",
                 progress: currentProgress,
+                subAgent: {
+                  profileId: task.profileId,
+                  templateId: task.templateId,
+                  profileVersion: task.profileVersion,
+                  originTool: task.originTool,
+                },
               });
             }
           }
@@ -212,6 +190,12 @@ export async function executeSubAgentTask(
       type: "complete",
       progress: 100,
       result: task.result,
+      subAgent: {
+        profileId: task.profileId,
+        templateId: task.templateId,
+        profileVersion: task.profileVersion,
+        originTool: task.originTool,
+      },
     });
   } catch (error) {
     console.error(`[Executor/${task.id}] Error:`, error);
@@ -229,6 +213,12 @@ export async function executeSubAgentTask(
       type: "error",
       error: errorMessage,
       progress: currentProgress,
+      subAgent: {
+        profileId: task.profileId,
+        templateId: task.templateId,
+        profileVersion: task.profileVersion,
+        originTool: task.originTool,
+      },
     });
 
     throw error;
