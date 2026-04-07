@@ -8,11 +8,7 @@ import { convertToModelMessages, streamText, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
-import { formatReposForInitialContext } from "@/lib/github/utils";
-import { createStarAgent } from "@/agents/star";
-import { createRuntimeTools, resolveEnabledToolIds } from "@/lib/agents/runtime-tools";
-import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
-import { applyPromptConfig, createPromptTemplateVars } from "@/lib/agents/prompt-template";
+import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
@@ -62,35 +58,13 @@ export async function handleStarAgent(
 
   // Extract agent configuration
   const agentConfig: AgentConfigPayload = body.agentConfig || {};
-
-  // Create Star Agent with repos context
-  const starAgent = createStarAgent(finalRepos);
-
-  // Get tools and prompt from agent
-  const enabledToolIds = resolveEnabledToolIds(
-    starAgent.id,
-    agentConfig.enabledTools,
-    agentConfig.toolConfigs
-  );
-  const tools = createRuntimeTools(enabledToolIds, {
-    agentId: starAgent.id,
+  const { tools, systemPrompt } = resolveAgentRuntime({
+    agentId: "star",
     requestId,
     repos: finalRepos,
     username,
-    customParams: agentConfig.customParams,
-    staticParams: agentConfig.staticParams,
-    toolConfigs: agentConfig.toolConfigs,
+    agentConfig,
   });
-  const reposContext = formatReposForInitialContext(finalRepos);
-  const defaultSystemPromptTemplate = getDefaultSystemPromptTemplate("star");
-  const promptVars = createPromptTemplateVars({
-    username,
-    reposCount: finalRepos.length,
-    extras: {
-      repos_context: reposContext,
-    },
-  });
-  const systemPrompt = applyPromptConfig(defaultSystemPromptTemplate, agentConfig, promptVars);
 
   // Convert messages to model format
   // ignoreIncompleteToolCalls: true to handle cases where user stops mid-tool-call

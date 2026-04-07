@@ -6,10 +6,11 @@ import {
   getAgentTools,
   getCoreTools,
   getDefaultEnabledTools,
-  normalizeEnabledTools,
   TOOL_CATEGORIES,
 } from "@/lib/agents/tool-registry";
 import type { ToolCategory, ToolMeta } from "@/lib/agents/tool-registry";
+import { getToolInputSchema } from "@/lib/agents/base/tool-definitions";
+import { validateDefaultInputWithSchema } from "@/lib/agents/base/tool-default-validator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,13 +21,13 @@ import { Textarea } from "@/components/ui/textarea";
 
 interface AgentToolCenterProps {
   agentId: string;
-  enabledTools: string[];
-  hasExplicitSelection: boolean;
   toolConfigs: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>;
-  onChange: (enabledTools: string[]) => void;
   onToolConfigChange: (
     toolId: string,
     config: { enabled?: boolean; defaultInput?: Record<string, unknown> }
+  ) => void;
+  onToolConfigsChange: (
+    next: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>
   ) => void;
 }
 
@@ -42,17 +43,25 @@ function groupToolsByCategory(tools: ToolMeta[]): Record<ToolCategory, ToolMeta[
 
 export function AgentToolCenter({
   agentId,
-  enabledTools,
-  hasExplicitSelection,
   toolConfigs,
-  onChange,
   onToolConfigChange,
+  onToolConfigsChange,
 }: AgentToolCenterProps) {
   const availableTools = getAgentTools(agentId);
   const coreToolIds = new Set(getCoreTools(agentId));
   const defaultTools = getDefaultEnabledTools(agentId);
   const [keyword, setKeyword] = useState("");
-  const effectiveEnabledTools = hasExplicitSelection ? enabledTools : defaultTools;
+  const effectiveEnabledTools = useMemo(() => {
+    const enabled = new Set(defaultTools);
+    for (const [toolId, config] of Object.entries(toolConfigs)) {
+      if (config.enabled === true) {
+        enabled.add(toolId);
+      } else if (config.enabled === false) {
+        enabled.delete(toolId);
+      }
+    }
+    return [...enabled];
+  }, [defaultTools, toolConfigs]);
   const enabledToolSet = useMemo(() => new Set(effectiveEnabledTools), [effectiveEnabledTools]);
   const [defaultInputDrafts, setDefaultInputDrafts] = useState<Record<string, string>>({});
   const [defaultInputErrors, setDefaultInputErrors] = useState<Record<string, string | undefined>>({});
@@ -89,28 +98,35 @@ export function AgentToolCenter({
   const toolsByCategory = groupToolsByCategory(filteredTools);
   const orderedCategories = Object.keys(toolsByCategory) as ToolCategory[];
 
-  const updateTools = (nextTools: string[]) => {
-    onChange(normalizeEnabledTools(agentId, nextTools));
-  };
-
   const handleToolToggle = (toolId: string, checked: boolean) => {
-    if (checked) {
-      updateTools([...enabledToolSet, toolId]);
-      return;
-    }
-    updateTools(effectiveEnabledTools.filter((id) => id !== toolId));
+    onToolConfigChange(toolId, { enabled: checked });
   };
 
   const handleEnableAll = () => {
-    updateTools(availableTools.map((tool) => tool.id));
+    const next = { ...toolConfigs };
+    for (const tool of availableTools) {
+      next[tool.id] = { ...next[tool.id], enabled: true };
+    }
+    onToolConfigsChange(next);
   };
 
   const handleDisableAll = () => {
-    updateTools([]);
+    const next = { ...toolConfigs };
+    for (const tool of availableTools) {
+      next[tool.id] = { ...next[tool.id], enabled: false };
+    }
+    onToolConfigsChange(next);
   };
 
   const handleResetToDefault = () => {
-    updateTools(defaultTools);
+    const next = { ...toolConfigs };
+    for (const tool of availableTools) {
+      next[tool.id] = {
+        ...next[tool.id],
+        enabled: undefined,
+      };
+    }
+    onToolConfigsChange(next);
   };
 
   const handleDefaultInputChange = (toolId: string, nextValue: string) => {
@@ -128,6 +144,16 @@ export function AgentToolCenter({
         setDefaultInputErrors(current => ({ ...current, [toolId]: "必须是 JSON 对象，例如 {\"key\":\"value\"}" }));
         return;
       }
+
+      const schema = getToolInputSchema(toolId);
+      if (schema) {
+        const validated = validateDefaultInputWithSchema(schema, parsed as Record<string, unknown>);
+        if (!validated.valid) {
+          setDefaultInputErrors(current => ({ ...current, [toolId]: validated.error || "参数校验失败" }));
+          return;
+        }
+      }
+
       setDefaultInputErrors(current => ({ ...current, [toolId]: undefined }));
       onToolConfigChange(toolId, { defaultInput: parsed as Record<string, unknown> });
     } catch {

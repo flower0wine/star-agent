@@ -35,6 +35,7 @@ import type {
 import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
 import { parseSubAgentProfiles } from "@/lib/agents/sub-agent/profile-schema";
 import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
+import { findUnknownPromptVariables } from "@/lib/agents/base/prompt-template-validator";
 import { SettingsSectionShell } from "./settings-section-shell";
 import { AgentSettingsSidebar } from "./agent-settings/agent-settings-sidebar";
 import type { AgentPanelType, AgentSidebarItem } from "./agent-settings/agent-settings-sidebar";
@@ -186,22 +187,47 @@ function RepositorySyncCard({
 interface PromptCardProps {
   title: string;
   description: string;
+  agentId: AgentId;
   systemPromptTemplate: string;
   defaultSystemPromptTemplate: string;
   variables: string[];
-  onSystemPromptTemplateChange: (value: string) => void;
+  onSystemPromptTemplateSave: (value: string) => Promise<void> | void;
 }
 
 function PromptCard({
   title,
   description,
+  agentId,
   systemPromptTemplate,
   defaultSystemPromptTemplate,
   variables,
-  onSystemPromptTemplateChange,
+  onSystemPromptTemplateSave,
 }: PromptCardProps) {
   const effectiveTemplate = systemPromptTemplate || defaultSystemPromptTemplate;
   const variableTokens = variables.map(name => `{{${name}}}`).join("、");
+  const [draftTemplate, setDraftTemplate] = useState(effectiveTemplate);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setDraftTemplate(effectiveTemplate);
+    setIsDirty(false);
+  }, [effectiveTemplate]);
+
+  const unknownVars = findUnknownPromptVariables(draftTemplate, variables);
+
+  const handleSave = async () => {
+    if (!isDirty || unknownVars.length > 0 || isSaving) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onSystemPromptTemplateSave(draftTemplate);
+      setIsDirty(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <Card className="border-border/70">
@@ -210,18 +236,59 @@ function PromptCard({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
-        <Label>系统提示词模板</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label>系统提示词模板</Label>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+            onClick={() => {
+              setDraftTemplate(defaultSystemPromptTemplate);
+              setIsDirty(true);
+            }}
+          >
+            恢复默认模板
+          </button>
+        </div>
         <TemplateEditor
-          value={effectiveTemplate}
-          onChange={onSystemPromptTemplateChange}
+          value={draftTemplate}
+          onChange={(value) => {
+            setDraftTemplate(value);
+            setIsDirty(true);
+          }}
           rows={12}
           placeholder="输入系统提示词模板..."
           variables={variables}
           showVariableHint
         />
         <p className="text-xs text-muted-foreground">
-          输入框已加载默认模板；可直接编辑。可用变量：<code>{variableTokens}</code>。
+          输入框已加载默认模板（{agentId}）；可直接编辑。可用变量：<code>{variableTokens}</code>。
         </p>
+        {unknownVars.length > 0 && (
+          <p className="text-xs text-destructive">
+            未知变量：{unknownVars.join(", ")}
+          </p>
+        )}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline-offset-4 hover:underline disabled:opacity-50"
+            disabled={!isDirty || isSaving}
+            onClick={() => {
+              setDraftTemplate(effectiveTemplate);
+              setIsDirty(false);
+            }}
+          >
+            取消修改
+          </button>
+          <button
+            type="button"
+            className="rounded-md bg-primary px-2.5 py-1 text-xs text-primary-foreground disabled:opacity-50"
+            disabled={!isDirty || unknownVars.length > 0 || isSaving}
+            onClick={() => void handleSave()}
+          >
+            {isSaving ? "保存中..." : "保存模板"}
+          </button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -418,10 +485,6 @@ function PatentApiConfigCard({
   );
 }
 
-function readToolSelectionConfigured(customParams: Record<string, unknown>): boolean {
-  return customParams.toolSelectionConfigured === true;
-}
-
 function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
   enabled?: boolean;
   defaultInput?: Record<string, unknown>;
@@ -556,17 +619,7 @@ export function AgentSettings() {
   }
 
   const { dynamicConfig, staticConfig } = activeState.config;
-  const hasToolSelectionConfigured = readToolSelectionConfigured(dynamicConfig.customParams);
   const toolConfigs = readAgentToolConfigs(dynamicConfig.toolConfigs);
-  const handleToolChange = async (tools: string[]) => {
-    await activeState.updateDynamicConfig({
-      enabledTools: tools,
-      customParams: {
-        ...dynamicConfig.customParams,
-        toolSelectionConfigured: true,
-      },
-    });
-  };
 
   const handleFetchModeChange = (mode: string) => {
     if (activeAgentId === "star") {
@@ -626,6 +679,13 @@ export function AgentSettings() {
           ...config,
         },
       },
+    });
+  };
+  const handleToolConfigsChange = async (
+    nextToolConfigs: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>
+  ) => {
+    await activeState.updateDynamicConfig({
+      toolConfigs: nextToolConfigs,
     });
   };
 
@@ -731,11 +791,12 @@ export function AgentSettings() {
                     <PromptCard
                       title="提示词增强"
                       description="编辑该 Agent 的系统提示词模板，保存后会按变量渲染并直接生效。"
+                      agentId="patent"
                       systemPromptTemplate={dynamicConfig.systemPromptTemplate || ""}
                       defaultSystemPromptTemplate={getDefaultSystemPromptTemplate("patent")}
                       variables={["current_date", "provider", "default_lookback_months", "max_results_per_request", "default_sort_by"]}
-                      onSystemPromptTemplateChange={(value) =>
-                        void activeState.updateDynamicConfig({ systemPromptTemplate: value })}
+                      onSystemPromptTemplateSave={async (value) =>
+                        await activeState.updateDynamicConfig({ systemPromptTemplate: value })}
                     />
                   </div>
                 )
@@ -765,11 +826,12 @@ export function AgentSettings() {
                     <PromptCard
                       title="提示词增强"
                       description="编辑该 Agent 的系统提示词模板，保存后会按变量渲染并直接生效。"
+                      agentId={activeAgentId}
                       systemPromptTemplate={dynamicConfig.systemPromptTemplate || ""}
                       defaultSystemPromptTemplate={getDefaultSystemPromptTemplate(activeAgentId)}
                       variables={["current_date", "username", "repos_count", "repos_context"]}
-                      onSystemPromptTemplateChange={(value) =>
-                        void activeState.updateDynamicConfig({ systemPromptTemplate: value })}
+                      onSystemPromptTemplateSave={async (value) =>
+                        await activeState.updateDynamicConfig({ systemPromptTemplate: value })}
                     />
                   </div>
                 ))}
@@ -777,11 +839,9 @@ export function AgentSettings() {
             {activePanel === "agents" && (
               <AgentToolCenter
                 agentId={activeAgentId}
-                enabledTools={dynamicConfig.enabledTools}
-                hasExplicitSelection={hasToolSelectionConfigured}
                 toolConfigs={toolConfigs}
-                onChange={(tools) => void handleToolChange(tools)}
                 onToolConfigChange={(toolId, config) => void handleToolConfigChange(toolId, config)}
+                onToolConfigsChange={(nextToolConfigs) => void handleToolConfigsChange(nextToolConfigs)}
               />
             )}
 
@@ -811,5 +871,6 @@ export function AgentSettings() {
     </SettingsSectionShell>
   );
 }
+
 
 

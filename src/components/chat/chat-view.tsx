@@ -86,10 +86,6 @@ interface PendingRouteMessagePayload {
 const PendingRouteMessageStorageKey = "star-agent:pending-route-message";
 const DEFAULT_SUBAGENT_STATIC_CONFIG: Record<string, unknown> = {};
 
-function readToolSelectionConfigured(customParams: Record<string, unknown>): boolean {
-  return customParams.toolSelectionConfigured === true;
-}
-
 const SUGGESTIONS: Record<AgentId, SuggestionItem[]> = {
   star: [
     { text: "展示我收藏最多 star 的仓库" },
@@ -218,19 +214,13 @@ export function ChatView({
   const selectedAgentConfig = selectedAgent === "star"
     ? starAgentConfig
     : (selectedAgent === "master" ? masterAgentConfig : patentAgentConfig);
-  const hasToolSelectionConfigured = selectedAgentConfig
-    ? readToolSelectionConfigured(selectedAgentConfig.dynamicConfig.customParams)
-    : false;
   const subAgentProfiles = subAgentConfig?.dynamicConfig.customParams?.subAgentProfiles;
   const agentRuntimeConfig = selectedAgentConfig
     ? {
         systemPromptTemplate: selectedAgentConfig.dynamicConfig.systemPromptTemplate || undefined,
-        enabledTools: hasToolSelectionConfigured
-          ? selectedAgentConfig.dynamicConfig.enabledTools
-          : undefined,
         toolConfigs: selectedAgentConfig.dynamicConfig.toolConfigs,
         customParams: selectedAgentConfig.dynamicConfig.customParams,
-        staticParams: selectedAgentConfig.staticConfig as Record<string, unknown>,
+        staticParams: selectedAgentConfig.staticConfig as unknown as Record<string, unknown>,
       }
     : undefined;
 

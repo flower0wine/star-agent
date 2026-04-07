@@ -22,12 +22,21 @@ import { getModelInfo } from "./model";
 import { handleStarAgent } from "./handler";
 import { handleMasterAgent } from "./handler-master";
 import { handlePatentAgent } from "./handler-patent";
+import type { ChatRequestBody } from "./types";
 
 // Re-export types for external usage
 export type { ChatMessage } from "./types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+type AgentHandler = (requestId: string, body: ChatRequestBody, signal: AbortSignal) => Promise<Response>;
+
+const AGENT_HANDLER_MAP: Record<string, AgentHandler> = {
+  star: async (requestId, body, signal) => handleStarAgent(requestId, body, signal),
+  master: async (requestId, body) => handleMasterAgent(requestId, body),
+  patent: async (requestId, body, signal) => handlePatentAgent(requestId, body, signal),
+};
 
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID().slice(0, 8);
@@ -42,22 +51,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${requestId}] Agent: ${agentId}, Messages: ${messages?.length || 0}`);
 
-    // Handle Star Agent
-    if (agentId === "star") {
-      return handleStarAgent(requestId, body, request.signal);
-    }
-
-    // Handle Master Agent
-    if (agentId === "master") {
-      console.log(`[${requestId}] Calling handleMasterAgent...`);
-      const result = await handleMasterAgent(requestId, body);
-      console.log(`[${requestId}] handleMasterAgent returned, status: ${result.status}`);
-      return result;
-    }
-
-    // Handle Patent Agent
-    if (agentId === "patent") {
-      return handlePatentAgent(requestId, body, request.signal);
+    const handler = AGENT_HANDLER_MAP[agentId];
+    if (handler) {
+      const response = await handler(requestId, body, request.signal);
+      return response;
     }
 
     // Unknown agent

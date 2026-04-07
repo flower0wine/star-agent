@@ -9,14 +9,11 @@
 import { convertToModelMessages, streamText, stepCountIs } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
-import { createMasterAgent } from "@/agents/master";
-import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
-import { applyPromptConfig, createPromptTemplateVars } from "@/lib/agents/prompt-template";
+import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
 import { createMultiStreamResponse } from "@/lib/agents/multi-stream";
-import { createRuntimeTools, resolveEnabledToolIds } from "@/lib/agents/runtime-tools";
 
 /**
  * Handle Master Agent requests
@@ -60,31 +57,13 @@ export async function handleMasterAgent(
 
   // Extract agent configuration
   const agentConfig: AgentConfigPayload = body.agentConfig || {};
-
-  // Create Master Agent with repos and model
-  const masterAgent = createMasterAgent(finalRepos, username, agentConfig.customParams);
-
-  // Get tools and system prompt from agent
-  const enabledToolIds = resolveEnabledToolIds(
-    masterAgent.id,
-    agentConfig.enabledTools,
-    agentConfig.toolConfigs
-  );
-  const tools = createRuntimeTools(enabledToolIds, {
-    agentId: masterAgent.id,
+  const { tools, systemPrompt } = resolveAgentRuntime({
+    agentId: "master",
     requestId,
     repos: finalRepos,
     username,
-    customParams: agentConfig.customParams,
-    staticParams: agentConfig.staticParams,
-    toolConfigs: agentConfig.toolConfigs,
+    agentConfig,
   });
-  const defaultSystemPromptTemplate = getDefaultSystemPromptTemplate("master");
-  const promptVars = createPromptTemplateVars({
-    username,
-    reposCount: finalRepos.length,
-  });
-  const systemPrompt = applyPromptConfig(defaultSystemPromptTemplate, agentConfig, promptVars);
 
   // Convert messages to model format
   console.log(`[${requestId}] Converting messages...`);

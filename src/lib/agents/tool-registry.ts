@@ -1,43 +1,25 @@
 /**
- * Tool Registry
+ * Tool Registry (UI-facing)
  *
- * 集中定义所有可用工具元数据，并维护 Agent 与工具的映射关系
+ * 基于 base/tool-definitions 提供工具目录与筛选辅助函数。
  */
 
-// ============================================================================
-// Types
-// ============================================================================
+import { listToolDefinitions } from "@/lib/agents/base/tool-definitions";
+import type { ToolCategory } from "@/lib/agents/base/types";
 
-/**
- * 工具元数据
- */
+export type { ToolCategory } from "@/lib/agents/base/types";
+
 export interface ToolMeta {
-  /** 工具 ID（与实际工具名称匹配） */
   id: string;
-  /** 显示名称 */
   name: string;
-  /** 工具描述 */
   description: string;
-  /** 检索关键词 */
   searchKeywords?: string[];
-  /** 工具分类 */
   category: ToolCategory;
-  /** 默认启用的 Agent */
   defaultEnabledAgentIds: string[];
-  /** 是否为核心工具（仅标记，不做强制限制） */
   isCore?: boolean;
-  /** 是否支持 sub-agent runtime 动态装配 */
   subAgentCompatible?: boolean;
 }
 
-/**
- * 工具分类
- */
-export type ToolCategory = "search" | "display" | "info" | "agent";
-
-/**
- * 分类显示信息
- */
 export const TOOL_CATEGORIES: Record<ToolCategory, { label: string; description: string }> = {
   search: {
     label: "搜索工具",
@@ -57,138 +39,38 @@ export const TOOL_CATEGORIES: Record<ToolCategory, { label: string; description:
   },
 };
 
-// ============================================================================
-// Centralized Tool Catalog
-// ============================================================================
+const TOOL_CATALOG: ToolMeta[] = listToolDefinitions().map(def => ({
+  id: def.id,
+  name: def.name,
+  description: def.description,
+  searchKeywords: def.searchKeywords,
+  category: def.category,
+  defaultEnabledAgentIds: def.defaultEnabledAgentIds,
+  isCore: def.isCore,
+  subAgentCompatible: def.subAgentCompatible,
+}));
 
-export const TOOL_CATALOG: ToolMeta[] = [
-  {
-    id: "searchRepositories",
-    name: "搜索仓库",
-    description: "根据关键字、语言、主题等条件搜索和过滤仓库",
-    searchKeywords: ["repo", "search", "language", "topic"],
-    category: "search",
-    defaultEnabledAgentIds: ["star"],
-    isCore: true,
-    subAgentCompatible: true,
-  },
-  {
-    id: "displayRepositories",
-    name: "展示仓库",
-    description: "以卡片形式展示选定的仓库列表",
-    searchKeywords: ["repo", "display", "list", "card"],
-    category: "display",
-    defaultEnabledAgentIds: ["star", "master"],
-    isCore: true,
-    subAgentCompatible: true,
-  },
-  {
-    id: "getRepositoryReadme",
-    name: "获取 README",
-    description: "获取仓库的 README 文档内容",
-    searchKeywords: ["repo", "readme", "content"],
-    category: "info",
-    defaultEnabledAgentIds: ["star"],
-    subAgentCompatible: true,
-  },
-  {
-    id: "getAllRepos",
-    name: "获取所有仓库",
-    description: "获取全部仓库列表（仅当仓库数量 ≤ 200 时可用）",
-    searchKeywords: ["repo", "all", "list"],
-    category: "search",
-    defaultEnabledAgentIds: ["master"],
-    isCore: true,
-    subAgentCompatible: true,
-  },
-  {
-    id: "createSubAgent",
-    name: "创建子 Agent",
-    description: "创建子 Agent 来处理大量仓库（仓库数量 > 200 时使用）",
-    searchKeywords: ["subagent", "dispatch", "parallel"],
-    category: "agent",
-    defaultEnabledAgentIds: ["master"],
-    isCore: true,
-    subAgentCompatible: false,
-  },
-  {
-    id: "searchPatents",
-    name: "检索专利",
-    description: "按关键词、公司和时间范围检索公开专利",
-    searchKeywords: ["patent", "search", "company", "time"],
-    category: "search",
-    defaultEnabledAgentIds: ["patent"],
-    isCore: true,
-    subAgentCompatible: false,
-  },
-  {
-    id: "analyzePatentTrends",
-    name: "分析专利趋势",
-    description: "按公司聚合专利趋势，辅助判断未来技术方向",
-    searchKeywords: ["patent", "trend", "analysis"],
-    category: "info",
-    defaultEnabledAgentIds: ["patent"],
-    isCore: true,
-    subAgentCompatible: false,
-  },
-];
-
-// ============================================================================
-// Registry Helpers
-// ============================================================================
-
-/**
- * 获取 Agent 的所有可用工具
- */
 export function getAgentTools(agentId: string): ToolMeta[] {
   void agentId;
   return TOOL_CATALOG;
 }
 
-/**
- * 获取全量工具目录
- */
 export function getAllTools(): ToolMeta[] {
   return TOOL_CATALOG;
 }
 
-/**
- * 获取支持 sub-agent 的工具目录
- */
 export function getSubAgentCompatibleTools(): ToolMeta[] {
   return TOOL_CATALOG.filter(tool => tool.subAgentCompatible);
 }
 
-/**
- * 获取 Agent 的默认启用工具 ID 列表
- */
 export function getDefaultEnabledTools(agentId: string): string[] {
   return TOOL_CATALOG
-    .filter((tool) => tool.defaultEnabledAgentIds.includes(agentId))
-    .map((tool) => tool.id);
+    .filter(tool => tool.defaultEnabledAgentIds.includes(agentId))
+    .map(tool => tool.id);
 }
 
-/**
- * 获取 Agent 的核心工具 ID 列表（仅标记用途）
- */
 export function getCoreTools(agentId: string): string[] {
   return TOOL_CATALOG
-    .filter((tool) => tool.isCore && tool.defaultEnabledAgentIds.includes(agentId))
-    .map((tool) => tool.id);
+    .filter(tool => tool.isCore && tool.defaultEnabledAgentIds.includes(agentId))
+    .map(tool => tool.id);
 }
-
-/**
- * 标准化启用工具列表（去重 + 仅保留该 Agent 支持的工具）
- */
-export function normalizeEnabledTools(agentId: string, enabledTools: string[]): string[] {
-  void agentId;
-  const availableToolIds = new Set(TOOL_CATALOG.map((tool) => tool.id));
-  const normalized = new Set<string>();
-  for (const toolId of enabledTools) {
-    if (availableToolIds.has(toolId)) {
-      normalized.add(toolId);
-    }
-  }
-  return [...normalized];
-}
-

@@ -25,7 +25,6 @@ export interface PatentAgentCustomParams {
   epoConsumerKey?: string;
   epoConsumerSecret?: string;
   usptoApiKey?: string;
-  toolSelectionConfigured?: boolean;
 }
 
 export interface PatentRuntimeConfig {

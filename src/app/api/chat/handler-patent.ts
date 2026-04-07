@@ -4,11 +4,7 @@
 
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 
-import { createPatentAgent } from "@/agents/patent";
-import { resolvePatentRuntimeConfig } from "@/agents/patent/static-config";
-import { createRuntimeTools, resolveEnabledToolIds } from "@/lib/agents/runtime-tools";
-import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
-import { applyPromptConfig, createPromptTemplateVars } from "@/lib/agents/prompt-template";
+import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
 
 import { getModel } from "./model";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
@@ -21,32 +17,11 @@ export async function handlePatentAgent(
 ): Promise<Response> {
   const generationStartedAt = new Date().toISOString();
   const agentConfig: AgentConfigPayload = body.agentConfig || {};
-
-  const runtimeConfig = resolvePatentRuntimeConfig(agentConfig.staticParams, agentConfig.customParams);
-  const patentAgent = createPatentAgent(runtimeConfig);
-
-  const enabledToolIds = resolveEnabledToolIds(
-    patentAgent.id,
-    agentConfig.enabledTools,
-    agentConfig.toolConfigs
-  );
-  const tools = createRuntimeTools(enabledToolIds, {
-    agentId: patentAgent.id,
+  const { tools, systemPrompt } = resolveAgentRuntime({
+    agentId: "patent",
     requestId,
-    customParams: agentConfig.customParams,
-    staticParams: agentConfig.staticParams,
-    toolConfigs: agentConfig.toolConfigs,
+    agentConfig,
   });
-  const defaultSystemPromptTemplate = getDefaultSystemPromptTemplate("patent");
-  const promptVars = createPromptTemplateVars({
-    extras: {
-      provider: runtimeConfig.provider,
-      default_lookback_months: runtimeConfig.defaultLookbackMonths,
-      max_results_per_request: runtimeConfig.maxResultsPerRequest,
-      default_sort_by: runtimeConfig.defaultSortBy,
-    },
-  });
-  const systemPrompt = applyPromptConfig(defaultSystemPromptTemplate, agentConfig, promptVars);
 
   const modelMessages = await convertToModelMessages(body.messages, {
     tools,

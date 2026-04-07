@@ -13,7 +13,6 @@ import type { AgentConfiguration, AgentDynamicConfig } from "./db";
 
 export const DEFAULT_DYNAMIC_CONFIG: AgentDynamicConfig = {
   systemPromptTemplate: "",
-  enabledTools: [],
   toolConfigs: {},
   customParams: {},
 };

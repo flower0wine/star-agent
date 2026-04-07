@@ -59,11 +59,14 @@ export function addUsage(
 export function sumUsage(
   usages: Array<LanguageModelUsage | undefined>
 ): LanguageModelUsage {
-  return usages.reduce((acc, usage) => addUsage(acc, usage), emptyUsage());
+  let acc: LanguageModelUsage = emptyUsage();
+  for (const usage of usages) {
+    acc = addUsage(acc, usage);
+  }
+  return acc;
 }
 
 export function formatTokens(tokens: number | undefined): string {
   const value = toNumber(tokens);
   return new Intl.NumberFormat("en-US").format(value);
 }
-

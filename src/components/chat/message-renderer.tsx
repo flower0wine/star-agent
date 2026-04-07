@@ -124,12 +124,24 @@ interface CreateSubAgentToolInput {
   };
 }
 
-function isSubAgentToolPart(part: Record<string, unknown>): boolean {
-  if (!("type" in part) || typeof part.type !== "string" || !part.type.startsWith("tool-")) {
+interface SubAgentToolPart {
+  type: string;
+  state?: "input-streaming" | "output-available" | "output-error" | string;
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
+}
+
+function isSubAgentToolPart(part: unknown): part is SubAgentToolPart {
+  if (!part || typeof part !== "object") {
+    return false;
+  }
+  const candidate = part as Record<string, unknown>;
+  if (!("type" in candidate) || typeof candidate.type !== "string" || !candidate.type.startsWith("tool-")) {
     return false;
   }
 
-  const output = part.output;
+  const output = candidate.output;
   if (!output || typeof output !== "object") {
     return false;
   }
@@ -206,7 +218,7 @@ export const MessageRenderer = memo(({
       }
 
       // 3. Display Repositories Tool - 专门的 UI 展示工具 (支持渐进式加载)
-      if (isSubAgentToolPart(part as unknown as Record<string, unknown>)) {
+      if (isSubAgentToolPart(part)) {
         const toolType = typeof part.type === "string" ? part.type : "tool-subAgent";
         if (part.state === "input-streaming") {
           return (
@@ -311,7 +323,7 @@ export const MessageRenderer = memo(({
         return null;
       }
 
-      if (part.type === "tool-displayRepositories") {
+      if (isStaticToolUIPart(part) && part.type === "tool-displayRepositories") {
         switch (part.state) {
           case "input-streaming":
             return (

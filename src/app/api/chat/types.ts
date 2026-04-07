@@ -13,8 +13,6 @@ export interface ChatMessage extends UIMessage<ChatMessageMetadata> {}
 export interface AgentConfigPayload {
   /** 系统提示词模板（支持变量） */
   systemPromptTemplate?: string;
-  /** 启用的工具 ID 列表 */
-  enabledTools?: string[];
   /** 每个工具的局部配置（按 Agent 隔离） */
   toolConfigs?: Record<string, {
     enabled?: boolean;

@@ -29,7 +29,6 @@ export interface ChatModelConfig {
 
 export interface AgentRuntimeConfig {
   systemPromptTemplate?: string;
-  enabledTools?: string[];
   toolConfigs?: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>;
   customParams?: Record<string, unknown>;
   staticParams?: Record<string, unknown>;
