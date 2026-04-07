@@ -6,6 +6,9 @@ import { convertToModelMessages, stepCountIs, streamText } from "ai";
 
 import { createPatentAgent } from "@/agents/patent";
 import { resolvePatentRuntimeConfig } from "@/agents/patent/static-config";
+import { createRuntimeTools, resolveEnabledToolIds } from "@/lib/agents/runtime-tools";
+import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
+import { applyPromptConfig, createPromptTemplateVars } from "@/lib/agents/prompt-template";
 
 import { getModel } from "./model";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
@@ -22,19 +25,28 @@ export async function handlePatentAgent(
   const runtimeConfig = resolvePatentRuntimeConfig(agentConfig.staticParams, agentConfig.customParams);
   const patentAgent = createPatentAgent(runtimeConfig);
 
-  let tools = patentAgent.getTools({});
-  let systemPrompt = patentAgent.getSystemPrompt({});
-
-  if (Array.isArray(agentConfig.enabledTools)) {
-    const enabledSet = new Set(agentConfig.enabledTools);
-    tools = Object.fromEntries(
-      Object.entries(tools).filter(([key]) => enabledSet.has(key))
-    );
-  }
-
-  if (agentConfig.additionalSystemPrompt) {
-    systemPrompt = `${systemPrompt}\n\n## 用户附加指令\n${agentConfig.additionalSystemPrompt}`;
-  }
+  const enabledToolIds = resolveEnabledToolIds(
+    patentAgent.id,
+    agentConfig.enabledTools,
+    agentConfig.toolConfigs
+  );
+  const tools = createRuntimeTools(enabledToolIds, {
+    agentId: patentAgent.id,
+    requestId,
+    customParams: agentConfig.customParams,
+    staticParams: agentConfig.staticParams,
+    toolConfigs: agentConfig.toolConfigs,
+  });
+  const defaultSystemPromptTemplate = getDefaultSystemPromptTemplate("patent");
+  const promptVars = createPromptTemplateVars({
+    extras: {
+      provider: runtimeConfig.provider,
+      default_lookback_months: runtimeConfig.defaultLookbackMonths,
+      max_results_per_request: runtimeConfig.maxResultsPerRequest,
+      default_sort_by: runtimeConfig.defaultSortBy,
+    },
+  });
+  const systemPrompt = applyPromptConfig(defaultSystemPromptTemplate, agentConfig, promptVars);
 
   const modelMessages = await convertToModelMessages(body.messages, {
     tools,

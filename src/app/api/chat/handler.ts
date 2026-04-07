@@ -10,6 +10,9 @@ import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { formatReposForInitialContext } from "@/lib/github/utils";
 import { createStarAgent } from "@/agents/star";
+import { createRuntimeTools, resolveEnabledToolIds } from "@/lib/agents/runtime-tools";
+import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
+import { applyPromptConfig, createPromptTemplateVars } from "@/lib/agents/prompt-template";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
@@ -64,26 +67,30 @@ export async function handleStarAgent(
   const starAgent = createStarAgent(finalRepos);
 
   // Get tools and prompt from agent
-  let tools = starAgent.getTools({});
-  const reposContext = formatReposForInitialContext(finalRepos);
-  let systemPrompt = starAgent.getSystemPrompt({
-    username,
+  const enabledToolIds = resolveEnabledToolIds(
+    starAgent.id,
+    agentConfig.enabledTools,
+    agentConfig.toolConfigs
+  );
+  const tools = createRuntimeTools(enabledToolIds, {
+    agentId: starAgent.id,
+    requestId,
     repos: finalRepos,
-    reposContext,
+    username,
+    customParams: agentConfig.customParams,
+    staticParams: agentConfig.staticParams,
+    toolConfigs: agentConfig.toolConfigs,
   });
-
-  // Apply agent configuration: filter tools based on enabledTools
-  if (Array.isArray(agentConfig.enabledTools)) {
-    const enabledSet = new Set(agentConfig.enabledTools);
-    tools = Object.fromEntries(
-      Object.entries(tools).filter(([key]) => enabledSet.has(key))
-    );
-  }
-
-  // Apply agent configuration: append additional system prompt
-  if (agentConfig.additionalSystemPrompt) {
-    systemPrompt = `${systemPrompt}\n\n## 用户附加指令\n${agentConfig.additionalSystemPrompt}`;
-  }
+  const reposContext = formatReposForInitialContext(finalRepos);
+  const defaultSystemPromptTemplate = getDefaultSystemPromptTemplate("star");
+  const promptVars = createPromptTemplateVars({
+    username,
+    reposCount: finalRepos.length,
+    extras: {
+      repos_context: reposContext,
+    },
+  });
+  const systemPrompt = applyPromptConfig(defaultSystemPromptTemplate, agentConfig, promptVars);
 
   // Convert messages to model format
   // ignoreIncompleteToolCalls: true to handle cases where user stops mid-tool-call

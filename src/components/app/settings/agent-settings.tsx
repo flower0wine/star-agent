@@ -34,6 +34,7 @@ import type {
 } from "@/agents/patent/static-config";
 import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
 import { parseSubAgentProfiles } from "@/lib/agents/sub-agent/profile-schema";
+import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
 import { SettingsSectionShell } from "./settings-section-shell";
 import { AgentSettingsSidebar } from "./agent-settings/agent-settings-sidebar";
 import type { AgentPanelType, AgentSidebarItem } from "./agent-settings/agent-settings-sidebar";
@@ -41,6 +42,7 @@ import { AgentToolCenter } from "./agent-settings/agent-tool-center";
 import { SubAgentProfileCenter, createNewSubAgentProfile } from "./agent-settings/subagent-profile-center";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TemplateEditor } from "@/components/ai-elements/editors/template-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,7 +53,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 
 dayjs.extend(relativeTime);
 dayjs.locale("zh-cn");
@@ -183,14 +184,25 @@ function RepositorySyncCard({
 }
 
 interface PromptCardProps {
-  id: string;
   title: string;
   description: string;
-  value: string;
-  onChange: (value: string) => void;
+  systemPromptTemplate: string;
+  defaultSystemPromptTemplate: string;
+  variables: string[];
+  onSystemPromptTemplateChange: (value: string) => void;
 }
 
-function PromptCard({ id, title, description, value, onChange }: PromptCardProps) {
+function PromptCard({
+  title,
+  description,
+  systemPromptTemplate,
+  defaultSystemPromptTemplate,
+  variables,
+  onSystemPromptTemplateChange,
+}: PromptCardProps) {
+  const effectiveTemplate = systemPromptTemplate || defaultSystemPromptTemplate;
+  const variableTokens = variables.map(name => `{{${name}}}`).join("、");
+
   return (
     <Card className="border-border/70">
       <CardHeader className="px-4 pt-4 pb-2 sm:px-5 sm:pt-5">
@@ -198,15 +210,18 @@ function PromptCard({ id, title, description, value, onChange }: PromptCardProps
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
-        <Label htmlFor={id}>附加系统提示词</Label>
-        <Textarea
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="输入额外的系统提示词..."
-          rows={8}
-          className="resize-none"
+        <Label>系统提示词模板</Label>
+        <TemplateEditor
+          value={effectiveTemplate}
+          onChange={onSystemPromptTemplateChange}
+          rows={12}
+          placeholder="输入系统提示词模板..."
+          variables={variables}
+          showVariableHint
         />
+        <p className="text-xs text-muted-foreground">
+          输入框已加载默认模板；可直接编辑。可用变量：<code>{variableTokens}</code>。
+        </p>
       </CardContent>
     </Card>
   );
@@ -407,6 +422,31 @@ function readToolSelectionConfigured(customParams: Record<string, unknown>): boo
   return customParams.toolSelectionConfigured === true;
 }
 
+function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
+  enabled?: boolean;
+  defaultInput?: Record<string, unknown>;
+}> {
+  if (!toolConfigs || typeof toolConfigs !== "object") {
+    return {};
+  }
+
+  const entries = Object.entries(toolConfigs);
+  return entries.reduce((acc, [toolId, config]) => {
+    if (!config || typeof config !== "object") {
+      return acc;
+    }
+    const typedConfig = config as {
+      enabled?: boolean;
+      defaultInput?: Record<string, unknown>;
+    };
+    acc[toolId] = {
+      enabled: typedConfig.enabled,
+      defaultInput: typedConfig.defaultInput,
+    };
+    return acc;
+  }, {} as Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>);
+}
+
 function readSubAgentProfiles(customParams: Record<string, unknown>): {
   profiles: SubAgentProfile[];
   parseError?: string;
@@ -517,6 +557,7 @@ export function AgentSettings() {
 
   const { dynamicConfig, staticConfig } = activeState.config;
   const hasToolSelectionConfigured = readToolSelectionConfigured(dynamicConfig.customParams);
+  const toolConfigs = readAgentToolConfigs(dynamicConfig.toolConfigs);
   const handleToolChange = async (tools: string[]) => {
     await activeState.updateDynamicConfig({
       enabledTools: tools,
@@ -570,6 +611,20 @@ export function AgentSettings() {
       customParams: {
         ...currentCustomParams,
         subAgentProfiles: profiles,
+      },
+    });
+  };
+  const handleToolConfigChange = async (
+    toolId: string,
+    config: { enabled?: boolean; defaultInput?: Record<string, unknown> }
+  ) => {
+    await activeState.updateDynamicConfig({
+      toolConfigs: {
+        ...toolConfigs,
+        [toolId]: {
+          ...toolConfigs[toolId],
+          ...config,
+        },
       },
     });
   };
@@ -674,12 +729,13 @@ export function AgentSettings() {
                     />
 
                     <PromptCard
-                      id={`${activeAgentId}-additional-prompt`}
                       title="提示词增强"
-                      description="附加到默认系统提示词末尾，用于微调 Agent 行为。"
-                      value={dynamicConfig.additionalSystemPrompt}
-                      onChange={(value) =>
-                        void activeState.updateDynamicConfig({ additionalSystemPrompt: value })}
+                      description="编辑该 Agent 的系统提示词模板，保存后会按变量渲染并直接生效。"
+                      systemPromptTemplate={dynamicConfig.systemPromptTemplate || ""}
+                      defaultSystemPromptTemplate={getDefaultSystemPromptTemplate("patent")}
+                      variables={["current_date", "provider", "default_lookback_months", "max_results_per_request", "default_sort_by"]}
+                      onSystemPromptTemplateChange={(value) =>
+                        void activeState.updateDynamicConfig({ systemPromptTemplate: value })}
                     />
                   </div>
                 )
@@ -707,12 +763,13 @@ export function AgentSettings() {
                     />
 
                     <PromptCard
-                      id={`${activeAgentId}-additional-prompt`}
                       title="提示词增强"
-                      description="附加到默认系统提示词末尾，用于微调 Agent 行为。"
-                      value={dynamicConfig.additionalSystemPrompt}
-                      onChange={(value) =>
-                        void activeState.updateDynamicConfig({ additionalSystemPrompt: value })}
+                      description="编辑该 Agent 的系统提示词模板，保存后会按变量渲染并直接生效。"
+                      systemPromptTemplate={dynamicConfig.systemPromptTemplate || ""}
+                      defaultSystemPromptTemplate={getDefaultSystemPromptTemplate(activeAgentId)}
+                      variables={["current_date", "username", "repos_count", "repos_context"]}
+                      onSystemPromptTemplateChange={(value) =>
+                        void activeState.updateDynamicConfig({ systemPromptTemplate: value })}
                     />
                   </div>
                 ))}
@@ -722,7 +779,9 @@ export function AgentSettings() {
                 agentId={activeAgentId}
                 enabledTools={dynamicConfig.enabledTools}
                 hasExplicitSelection={hasToolSelectionConfigured}
+                toolConfigs={toolConfigs}
                 onChange={(tools) => void handleToolChange(tools)}
+                onToolConfigChange={(toolId, config) => void handleToolConfigChange(toolId, config)}
               />
             )}
 

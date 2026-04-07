@@ -10,10 +10,13 @@ import { convertToModelMessages, streamText, stepCountIs } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { createMasterAgent } from "@/agents/master";
+import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
+import { applyPromptConfig, createPromptTemplateVars } from "@/lib/agents/prompt-template";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
 import { createMultiStreamResponse } from "@/lib/agents/multi-stream";
+import { createRuntimeTools, resolveEnabledToolIds } from "@/lib/agents/runtime-tools";
 
 /**
  * Handle Master Agent requests
@@ -62,24 +65,26 @@ export async function handleMasterAgent(
   const masterAgent = createMasterAgent(finalRepos, username, agentConfig.customParams);
 
   // Get tools and system prompt from agent
-  let tools = masterAgent.getTools({ requestId });
-  let systemPrompt = masterAgent.getSystemPrompt({
-    username,
+  const enabledToolIds = resolveEnabledToolIds(
+    masterAgent.id,
+    agentConfig.enabledTools,
+    agentConfig.toolConfigs
+  );
+  const tools = createRuntimeTools(enabledToolIds, {
+    agentId: masterAgent.id,
+    requestId,
     repos: finalRepos,
+    username,
+    customParams: agentConfig.customParams,
+    staticParams: agentConfig.staticParams,
+    toolConfigs: agentConfig.toolConfigs,
   });
-
-  // Apply agent configuration: filter tools based on enabledTools
-  if (Array.isArray(agentConfig.enabledTools)) {
-    const enabledSet = new Set(agentConfig.enabledTools);
-    tools = Object.fromEntries(
-      Object.entries(tools).filter(([key]) => enabledSet.has(key))
-    );
-  }
-
-  // Apply agent configuration: append additional system prompt
-  if (agentConfig.additionalSystemPrompt) {
-    systemPrompt = `${systemPrompt}\n\n## 用户附加指令\n${agentConfig.additionalSystemPrompt}`;
-  }
+  const defaultSystemPromptTemplate = getDefaultSystemPromptTemplate("master");
+  const promptVars = createPromptTemplateVars({
+    username,
+    reposCount: finalRepos.length,
+  });
+  const systemPrompt = applyPromptConfig(defaultSystemPromptTemplate, agentConfig, promptVars);
 
   // Convert messages to model format
   console.log(`[${requestId}] Converting messages...`);

@@ -11,10 +11,15 @@ import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
 export interface ChatMessage extends UIMessage<ChatMessageMetadata> {}
 
 export interface AgentConfigPayload {
-  /** 附加系统提示词 */
-  additionalSystemPrompt?: string;
+  /** 系统提示词模板（支持变量） */
+  systemPromptTemplate?: string;
   /** 启用的工具 ID 列表 */
   enabledTools?: string[];
+  /** 每个工具的局部配置（按 Agent 隔离） */
+  toolConfigs?: Record<string, {
+    enabled?: boolean;
+    defaultInput?: Record<string, unknown>;
+  }>;
   /** 动态自定义参数 */
   customParams?: Record<string, unknown>;
   /** 静态配置参数快照 */

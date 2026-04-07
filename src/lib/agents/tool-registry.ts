@@ -18,10 +18,10 @@ export interface ToolMeta {
   name: string;
   /** 工具描述 */
   description: string;
+  /** 检索关键词 */
+  searchKeywords?: string[];
   /** 工具分类 */
   category: ToolCategory;
-  /** 适用的 Agent */
-  agentIds: string[];
   /** 默认启用的 Agent */
   defaultEnabledAgentIds: string[];
   /** 是否为核心工具（仅标记，不做强制限制） */
@@ -66,8 +66,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "searchRepositories",
     name: "搜索仓库",
     description: "根据关键字、语言、主题等条件搜索和过滤仓库",
+    searchKeywords: ["repo", "search", "language", "topic"],
     category: "search",
-    agentIds: ["star"],
     defaultEnabledAgentIds: ["star"],
     isCore: true,
     subAgentCompatible: true,
@@ -76,8 +76,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "displayRepositories",
     name: "展示仓库",
     description: "以卡片形式展示选定的仓库列表",
+    searchKeywords: ["repo", "display", "list", "card"],
     category: "display",
-    agentIds: ["star", "master"],
     defaultEnabledAgentIds: ["star", "master"],
     isCore: true,
     subAgentCompatible: true,
@@ -86,8 +86,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "getRepositoryReadme",
     name: "获取 README",
     description: "获取仓库的 README 文档内容",
+    searchKeywords: ["repo", "readme", "content"],
     category: "info",
-    agentIds: ["star"],
     defaultEnabledAgentIds: ["star"],
     subAgentCompatible: true,
   },
@@ -95,8 +95,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "getAllRepos",
     name: "获取所有仓库",
     description: "获取全部仓库列表（仅当仓库数量 ≤ 200 时可用）",
+    searchKeywords: ["repo", "all", "list"],
     category: "search",
-    agentIds: ["master"],
     defaultEnabledAgentIds: ["master"],
     isCore: true,
     subAgentCompatible: true,
@@ -105,8 +105,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "createSubAgent",
     name: "创建子 Agent",
     description: "创建子 Agent 来处理大量仓库（仓库数量 > 200 时使用）",
+    searchKeywords: ["subagent", "dispatch", "parallel"],
     category: "agent",
-    agentIds: ["master"],
     defaultEnabledAgentIds: ["master"],
     isCore: true,
     subAgentCompatible: false,
@@ -115,8 +115,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "searchPatents",
     name: "检索专利",
     description: "按关键词、公司和时间范围检索公开专利",
+    searchKeywords: ["patent", "search", "company", "time"],
     category: "search",
-    agentIds: ["patent"],
     defaultEnabledAgentIds: ["patent"],
     isCore: true,
     subAgentCompatible: false,
@@ -125,8 +125,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
     id: "analyzePatentTrends",
     name: "分析专利趋势",
     description: "按公司聚合专利趋势，辅助判断未来技术方向",
+    searchKeywords: ["patent", "trend", "analysis"],
     category: "info",
-    agentIds: ["patent"],
     defaultEnabledAgentIds: ["patent"],
     isCore: true,
     subAgentCompatible: false,
@@ -141,7 +141,8 @@ export const TOOL_CATALOG: ToolMeta[] = [
  * 获取 Agent 的所有可用工具
  */
 export function getAgentTools(agentId: string): ToolMeta[] {
-  return TOOL_CATALOG.filter((tool) => tool.agentIds.includes(agentId));
+  void agentId;
+  return TOOL_CATALOG;
 }
 
 /**
@@ -162,8 +163,7 @@ export function getSubAgentCompatibleTools(): ToolMeta[] {
  * 获取 Agent 的默认启用工具 ID 列表
  */
 export function getDefaultEnabledTools(agentId: string): string[] {
-  const tools = getAgentTools(agentId);
-  return tools
+  return TOOL_CATALOG
     .filter((tool) => tool.defaultEnabledAgentIds.includes(agentId))
     .map((tool) => tool.id);
 }
@@ -172,15 +172,17 @@ export function getDefaultEnabledTools(agentId: string): string[] {
  * 获取 Agent 的核心工具 ID 列表（仅标记用途）
  */
 export function getCoreTools(agentId: string): string[] {
-  const tools = getAgentTools(agentId);
-  return tools.filter((t) => t.isCore).map((t) => t.id);
+  return TOOL_CATALOG
+    .filter((tool) => tool.isCore && tool.defaultEnabledAgentIds.includes(agentId))
+    .map((tool) => tool.id);
 }
 
 /**
  * 标准化启用工具列表（去重 + 仅保留该 Agent 支持的工具）
  */
 export function normalizeEnabledTools(agentId: string, enabledTools: string[]): string[] {
-  const availableToolIds = new Set(getAgentTools(agentId).map((tool) => tool.id));
+  void agentId;
+  const availableToolIds = new Set(TOOL_CATALOG.map((tool) => tool.id));
   const normalized = new Set<string>();
   for (const toolId of enabledTools) {
     if (availableToolIds.has(toolId)) {

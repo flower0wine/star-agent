@@ -33,10 +33,15 @@ export interface ChatMessage {
  * Agent 动态配置（所有 Agent 通用）
  */
 export interface AgentDynamicConfig {
-  /** 用户附加的系统提示词 */
-  additionalSystemPrompt: string;
+  /** 可编辑系统提示词模板（支持变量） */
+  systemPromptTemplate: string;
   /** 启用的工具 ID 列表 */
   enabledTools: string[];
+  /** 每个工具的局部配置（按 Agent 隔离） */
+  toolConfigs: Record<string, {
+    enabled?: boolean;
+    defaultInput?: Record<string, unknown>;
+  }>;
   /** 自定义参数 */
   customParams: Record<string, unknown>;
 }

@@ -224,10 +224,11 @@ export function ChatView({
   const subAgentProfiles = subAgentConfig?.dynamicConfig.customParams?.subAgentProfiles;
   const agentRuntimeConfig = selectedAgentConfig
     ? {
-        additionalSystemPrompt: selectedAgentConfig.dynamicConfig.additionalSystemPrompt || undefined,
+        systemPromptTemplate: selectedAgentConfig.dynamicConfig.systemPromptTemplate || undefined,
         enabledTools: hasToolSelectionConfigured
           ? selectedAgentConfig.dynamicConfig.enabledTools
           : undefined,
+        toolConfigs: selectedAgentConfig.dynamicConfig.toolConfigs,
         customParams: selectedAgentConfig.dynamicConfig.customParams,
         staticParams: selectedAgentConfig.staticConfig as Record<string, unknown>,
       }
