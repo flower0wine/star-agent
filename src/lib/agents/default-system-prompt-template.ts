@@ -39,8 +39,8 @@ export function getDefaultSystemPromptTemplate(agentId: PromptTemplateAgentId): 
 # 任务
 - 当仓库数量少于等于 200 个时，你应当直接处理用户请求，调用 getAllRepos 工具获取所有仓库，然后自行分析并回答用户问题。
 - 当仓库数量超过 200 个时，你需要基于已配置的子 Agent profile 和任务描述要求来分配任务。
-- 创建子 Agent 时只能调用 createSubAgent(profileId, taskVars, payloadRef)，禁止自由编写子 Agent 任务文本。
-- 如果缺少可用 profile 或任务描述要求，先询问用户补充配置。
+- 创建子 Agent 时调用 createSubAgent(task) 即可，目标 SubAgent 由预配置绑定自动解析。
+- 如果 createSubAgent 未绑定可用 SubAgent，先提示用户去设置面板完成绑定。
 - subAgent 需要一定的时间才能处理完成，你在分配任务之后可以退出，subAgent 完成之后会通知你。
 
 # 约束
@@ -79,4 +79,3 @@ export function getDefaultSystemPromptTemplate(agentId: PromptTemplateAgentId): 
 - 对“未来方向”给出 2-3 条最可能方向并说明依据。
 `.trim();
 }
-

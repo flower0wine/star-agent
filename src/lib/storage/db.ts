@@ -39,6 +39,7 @@ export interface AgentDynamicConfig {
   toolConfigs: Record<string, {
     enabled?: boolean;
     defaultInput?: Record<string, unknown>;
+    boundSubAgentIds?: string[];
   }>;
   /** 自定义参数 */
   customParams: Record<string, unknown>;

@@ -5,13 +5,6 @@ const templateVarPattern = /\{\{\s*([a-z_]\w*)\s*\}\}/gi;
 
 type TemplateVars = Record<string, string | number | boolean>;
 
-const BUILTIN_VAR_TYPES: Record<string, SubAgentVarDef["type"]> = {
-  username: "string",
-  repos_count: "number",
-  start_index: "number",
-  end_index: "number",
-};
-
 export function extractTemplateVariables(template: string): string[] {
   const vars = new Set<string>();
   let match = templateVarPattern.exec(template);
@@ -36,14 +29,11 @@ function assertValueType(varName: string, value: unknown, expected: SubAgentVarD
 }
 
 export function buildResolvedTemplateVars(options: {
-  userVars: TemplateVars;
+  runtimeVars: TemplateVars;
   varSchema: Record<string, SubAgentVarDef>;
-  builtinVars: TemplateVars;
 }): TemplateVars {
-  const { userVars, varSchema, builtinVars } = options;
-  const merged: TemplateVars = {
-    ...builtinVars,
-  };
+  const { runtimeVars, varSchema } = options;
+  const merged: TemplateVars = {};
 
   for (const [name, def] of Object.entries(varSchema)) {
     if (def.defaultValue !== undefined) {
@@ -51,7 +41,7 @@ export function buildResolvedTemplateVars(options: {
     }
   }
 
-  for (const [name, value] of Object.entries(userVars)) {
+  for (const [name, value] of Object.entries(runtimeVars)) {
     merged[name] = value;
   }
 
@@ -62,15 +52,11 @@ export function buildResolvedTemplateVars(options: {
   }
 
   for (const [name, value] of Object.entries(merged)) {
-    const isBuiltin = name in BUILTIN_VAR_TYPES;
-    if (!isBuiltin && !(name in varSchema)) {
-      throw new SubAgentConfigError("SUBAGENT_VAR_UNKNOWN", `Variable "${name}" is not defined in varSchema`);
+    const expectedType = varSchema[name]?.type;
+    if (!expectedType) {
+      continue;
     }
-
-    const expectedType = varSchema[name]?.type || BUILTIN_VAR_TYPES[name];
-    if (expectedType) {
-      assertValueType(name, value, expectedType);
-    }
+    assertValueType(name, value, expectedType);
   }
 
   return merged;

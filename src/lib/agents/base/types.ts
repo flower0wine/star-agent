@@ -8,6 +8,7 @@ export type ToolCategory = "search" | "display" | "info" | "agent";
 export interface AgentToolConfig {
   enabled?: boolean;
   defaultInput?: Record<string, unknown>;
+  boundSubAgentIds?: string[];
 }
 
 export interface ToolFactoryContext {
@@ -18,6 +19,7 @@ export interface ToolFactoryContext {
   customParams?: Record<string, unknown>;
   staticParams?: Record<string, unknown>;
   patentRuntimeConfig?: PatentRuntimeConfig;
+  toolConfig?: AgentToolConfig;
 }
 
 export interface ToolDefinition {
@@ -40,4 +42,3 @@ export interface AgentDefinition {
   promptVariables: string[];
   recommendedToolIds: string[];
 }
-

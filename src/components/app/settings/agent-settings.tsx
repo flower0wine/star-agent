@@ -488,6 +488,7 @@ function PatentApiConfigCard({
 function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
   enabled?: boolean;
   defaultInput?: Record<string, unknown>;
+  boundSubAgentIds?: string[];
 }> {
   if (!toolConfigs || typeof toolConfigs !== "object") {
     return {};
@@ -501,13 +502,17 @@ function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
     const typedConfig = config as {
       enabled?: boolean;
       defaultInput?: Record<string, unknown>;
+      boundSubAgentIds?: string[];
     };
     acc[toolId] = {
       enabled: typedConfig.enabled,
       defaultInput: typedConfig.defaultInput,
+      boundSubAgentIds: Array.isArray(typedConfig.boundSubAgentIds)
+        ? typedConfig.boundSubAgentIds.filter((id): id is string => typeof id === "string")
+        : undefined,
     };
     return acc;
-  }, {} as Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>);
+  }, {} as Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown>; boundSubAgentIds?: string[] }>);
 }
 
 function readSubAgentProfiles(customParams: Record<string, unknown>): {
@@ -669,7 +674,11 @@ export function AgentSettings() {
   };
   const handleToolConfigChange = async (
     toolId: string,
-    config: { enabled?: boolean; defaultInput?: Record<string, unknown> }
+    config: {
+      enabled?: boolean;
+      defaultInput?: Record<string, unknown>;
+      boundSubAgentIds?: string[];
+    }
   ) => {
     await activeState.updateDynamicConfig({
       toolConfigs: {
@@ -682,7 +691,11 @@ export function AgentSettings() {
     });
   };
   const handleToolConfigsChange = async (
-    nextToolConfigs: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>
+    nextToolConfigs: Record<string, {
+      enabled?: boolean;
+      defaultInput?: Record<string, unknown>;
+      boundSubAgentIds?: string[];
+    }>
   ) => {
     await activeState.updateDynamicConfig({
       toolConfigs: nextToolConfigs,
@@ -839,6 +852,7 @@ export function AgentSettings() {
             {activePanel === "agents" && (
               <AgentToolCenter
                 agentId={activeAgentId}
+                subAgentProfiles={subAgentProfiles}
                 toolConfigs={toolConfigs}
                 onToolConfigChange={(toolId, config) => void handleToolConfigChange(toolId, config)}
                 onToolConfigsChange={(nextToolConfigs) => void handleToolConfigsChange(nextToolConfigs)}

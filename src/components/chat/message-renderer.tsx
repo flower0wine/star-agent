@@ -116,12 +116,7 @@ interface CreateSubAgentToolOutput {
 }
 
 interface CreateSubAgentToolInput {
-  profileId?: string;
-  taskVars?: Record<string, unknown>;
-  payloadRef?: {
-    type?: string;
-    data?: unknown;
-  };
+  task?: string;
 }
 
 interface SubAgentToolPart {
@@ -256,17 +251,17 @@ export const MessageRenderer = memo(({
                   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 )}
               </div>
-              {input.profileId && (
+              {output.subAgent?.profileId && (
                 <div className="mt-2 rounded-md bg-background/70 px-2 py-1.5 text-xs text-foreground/90">
-                  <span className="font-medium">Profile:</span> {input.profileId}
+                  <span className="font-medium">SubAgent:</span> {output.subAgent.profileId}
+                </div>
+              )}
+              {input.task && (
+                <div className="mt-2 rounded-md border border-border/70 bg-background/70 px-2 py-1.5 text-xs text-foreground/90">
+                  <span className="font-medium">Task:</span> {input.task}
                 </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                {input.payloadRef?.type && (
-                  <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
-                    payload: {input.payloadRef.type}
-                  </span>
-                )}
                 {subAgentLabel && (
                   <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
                     {subAgentLabel}

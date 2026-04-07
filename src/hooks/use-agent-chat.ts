@@ -29,7 +29,11 @@ export interface ChatModelConfig {
 
 export interface AgentRuntimeConfig {
   systemPromptTemplate?: string;
-  toolConfigs?: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>;
+  toolConfigs?: Record<string, {
+    enabled?: boolean;
+    defaultInput?: Record<string, unknown>;
+    boundSubAgentIds?: string[];
+  }>;
   customParams?: Record<string, unknown>;
   staticParams?: Record<string, unknown>;
 }

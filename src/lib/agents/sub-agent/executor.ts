@@ -33,12 +33,10 @@ function formatReposForContext(repos: GitHubRepo[]): string {
  * Get sub-agent system prompt
  */
 function buildSubAgentSystemPrompt(task: SubAgentTask): string {
-  const reposContext = formatReposForContext(task.repos);
   const vars: Record<string, string | number | boolean> = {
-    ...task.taskVars,
-    username: task.username,
-    repos_count: task.repos.length,
-    repos_context: reposContext,
+    ...task.runtimeVars,
+    repos_context: formatReposForContext(task.repos),
+    task: task.task,
   };
   return renderTemplate(task.profileSnapshot.systemPromptTemplate, vars);
 }

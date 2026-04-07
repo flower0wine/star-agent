@@ -5,6 +5,7 @@ import type {
   SubAgentVarDef,
   TemplateVariableType,
 } from "@/lib/agents/sub-agent/types";
+import { PREDEFINED_RUNTIME_VARIABLES } from "@/lib/agents/sub-agent/runtime-variables";
 import { getSubAgentCompatibleTools } from "@/lib/agents/tool-registry";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,15 +53,19 @@ export function createNewSubAgentProfile(existingProfiles: SubAgentProfile[]): S
     toolIds: ["searchRepositories", "getRepositoryReadme"],
     systemPromptTemplate: [
       "你是一个由用户配置的子 Agent。",
+      "当前任务: {{task}}",
       "用户: {{username}}",
       "仓库数量: {{repos_count}}",
       "仓库上下文:",
       "{{repos_context}}",
     ].join("\n"),
-    taskDescriptionRequirement: "请基于 {{username}} 的仓库列表完成分析，并输出重点结论。",
     varSchema: {
       username: { type: "string", required: true },
       repos_count: { type: "number", required: true },
+      repos_context: { type: "string", required: true },
+      task: { type: "string", required: true },
+      parent_agent_id: { type: "string" },
+      current_date: { type: "string" },
     },
     limits: {
       timeoutMs: 120000,
@@ -76,7 +81,10 @@ export function SubAgentProfileCenter({
   onDelete,
 }: SubAgentProfileCenterProps) {
   const tools = useMemo(() => getSubAgentCompatibleTools(), []);
-  const builtInVariables = useMemo(() => ["username", "repos_count", "repos_context", "start_index", "end_index"], []);
+  const builtInVariables = useMemo(
+    () => PREDEFINED_RUNTIME_VARIABLES.map(item => item.name),
+    []
+  );
   const [draftProfile, setDraftProfile] = useState<SubAgentProfile | null>(profile);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -150,7 +158,7 @@ export function SubAgentProfileCenter({
         <div className="flex items-start justify-between gap-2">
           <div>
             <CardTitle>SubAgent Profile Editor</CardTitle>
-            <CardDescription>编辑当前选中的 SubAgent Profile（tools / prompts / vars）。</CardDescription>
+            <CardDescription>编辑当前选中的 SubAgent（tools / prompt / vars）。</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -254,24 +262,9 @@ export function SubAgentProfileCenter({
                   version: current.version + 1,
                 }))}
             />
-          </div>
-
-          <div className="space-y-2 rounded-lg border bg-muted/10 p-3">
-            <Label>任务描述要求</Label>
             <p className="text-xs text-muted-foreground">
-              用于限制主 Agent 派发给该 SubAgent 的任务描述，支持变量占位 <code>{"{{变量名}}"}</code>。
+              可直接使用变量占位 <code>{"{{变量名}}"}</code>。createSubAgent 仅传入任务文本，变量由运行时自动注入。
             </p>
-            <TemplateVariableTextarea
-              rows={4}
-              value={draftProfile.taskDescriptionRequirement}
-              variables={variableOptions}
-              onChange={(nextValue) =>
-                updateDraftProfile(current => ({
-                  ...current,
-                  taskDescriptionRequirement: nextValue,
-                  version: current.version + 1,
-                }))}
-            />
           </div>
 
           <div className="space-y-4 rounded-lg border bg-muted/10 p-3">
@@ -296,7 +289,9 @@ export function SubAgentProfileCenter({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              变量白名单由此处变量名决定；勾选 required 后会在任务执行前强制校验必填。
+              变量白名单由此处变量名决定；勾选 required 后会在执行前强制校验必填。预定义运行时变量：
+              {" "}
+              {PREDEFINED_RUNTIME_VARIABLES.map(item => item.name).join(", ")}
             </p>
             <div className="hidden grid-cols-[1fr_140px_120px] gap-2 px-1 text-xs text-muted-foreground sm:grid">
               <span>变量名</span>

@@ -66,7 +66,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       context.username || "unknown",
       context.requestId,
       context.agentId,
-      context.customParams
+      context.customParams,
+      context.toolConfig
     ),
   },
   {

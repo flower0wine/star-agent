@@ -1,214 +1,207 @@
-# SubAgent 策略模式改造方案（支持动态参数与动态执行逻辑）
+# SubAgent 动态化重构方案（按你的目标修订）
 
-## 1. 关键前提（新增）
+## 1. 目标确认
 
-你提出的约束是正确且必须满足的：
+按你的最新要求，系统目标明确为：
 
-- `createSubAgent` 的输入参数不应固定。
-- 不同 SubAgent Profile 接受不同参数。
-- 同一 SubAgent 在不同任务类型下，执行逻辑也应不同。
+- `create-subagent` tool 能动态创建任意 subagent。
+- `subagent` 没有“模板”概念。
+- “创建的 profile 就是一个 subagent 实体配置”。
+- 任意 agent 使用 `create-subagent` 时，不由模型指定 subagent，而是使用“预配置绑定”的 subagent。
+- subagent 的系统提示词支持动态变量填充，变量字段名不固定。
+- 非必要场景禁止硬编码字段名与参数结构。
+- `variables` 和 `payloadRef` 不通过 tool 调用传入，而是由 subagent 运行时上下文自动提供（局部变量）。
 
-因此，方案从“固定 createSubAgent 入参”升级为“Profile + Task Contract 驱动”。
+## 2. 现状与偏差
 
-## 2. 当前问题（为什么会硬编码）
+当前实现偏差点：
 
-当前实现采用单一 `createSubAgent(profileId, taskVars, payloadRef)` 协议，原因为：
+- `createSubAgent` 入参结构是固定的（`profileId/taskVars/payloadRef`）。
+- `taskDescriptionRequirement` 仍在 profile 中承担“模板化任务文本”职责。
+- 内置变量和 payload 类型存在硬编码分支。
+- 当前由模型侧决定 `profileId`，与“预配置绑定”目标冲突，且易断联。
 
-- 早期优先跑通 master/subagent 主链路。
-- 通过固定字段减少模型调用失败。
-- 缺少“任务契约（Task Contract）”模型，导致参数和执行行为只能写死在工具文件中。
+这些与“profile 即 subagent、无模板层、动态变量字段”存在冲突。
 
-这直接导致：
+## 3. 新模型（核心）
 
-- 扩展新任务类型要改 `create-sub-agent.ts`。
-- payload 分发逻辑固定在工具实现中。
-- master 选 profile 容易断联（猜 profileId）。
+## 3.1 数据模型收敛：Profile 即 SubAgent
 
-## 3. 新架构：Profile + Task Contract + Strategy
+将 `SubAgentProfile` 语义统一为 `SubAgentDefinition`（命名可后续统一）：
 
-## 3.1 核心数据模型（新增）
+- `id`: subagent 唯一标识
+- `name`: 展示名
+- `enabled`: 是否可被选择
+- `systemPrompt`: subagent 系统提示词（可含变量占位）
+- `variablesSchema`: 变量定义（字段名动态）
+- `toolIds`: 当前 subagent 可用工具
+- `limits`: 执行限制（timeout 等）
+- `version`
 
-在 `SubAgentProfile` 下新增 `taskContracts`（替代固定参数假设）：
+删除/废弃：
 
-- `contractId`: 任务类型 ID（如 `repo-cluster-summary`）
-- `name`: 任务名
-- `description`: 给 master 的调用说明
-- `inputSchema`: 参数 JSON Schema（每个 contract 不同）
-- `payloadPolicy`: payload 选择策略标识（range/list/custom/...）
-- `executionPolicy`: 执行策略标识（analysis/report/extract/...）
-- `outputSchema`（可选）：输出结构约束
-- `enabled`: 是否可用
+- `taskDescriptionRequirement`
+- 任何“模板列表”“任务模板”概念字段
 
-结论：参数结构由 `taskContracts[*].inputSchema` 决定，不再硬编码在 tool 文件。
+说明：任务由 `create-subagent` 的调用参数直接给出，不再经过模板中转。
 
-## 3.2 Tool 层改造（两种可选实现）
+## 3.2 create-subagent tool 目标形态（预配置绑定）
 
-### 方案 A（推荐，先落地）
+建议固定“最小外壳”，由运行时绑定 subagent：
 
-保持单个 tool：`createSubAgent`
+- `task: string`（主 agent 传入的任务描述）
 
-固定外壳：
+关键点：
 
-- `profileId: string`
-- `contractId: string`
-- `args: Record<string, unknown>`
-- `payloadRef?: unknown`
+- 不由模型传 `subagentId`，避免选择断联与越权。
+- 不由模型传 `variables/payloadRef`，避免调用层参数膨胀。
+- 不再硬编码变量字段名；变量由运行时注入并按 `variablesSchema` 校验。
+- `task` 为显式输入，不依赖模板字段。
 
-动态行为：
+绑定来源：
 
-- 根据 `profileId + contractId` 找到 contract
-- 用 `inputSchema` 校验 `args`
-- 交给策略层执行
+- 在 agent 的 `createSubAgent` tool 配置中预先设置 `boundSubAgentIds`。
+- 最简模式：单绑定（只允许 1 个 subagent）。
+- 可扩展模式：多绑定池 + 调度策略自动挑选，但仍不由模型指定。
 
-优点：改动小、兼容当前 UI 和历史调用路径。
+## 3.3 提示词变量动态化
 
-### 方案 B（可选，后续增强）
+引入统一变量解析链路（策略）：
 
-为每个 contract 动态生成 tool（例如 `createSubAgent_profileA_contractX`），让模型得到强类型提示。
+1. 读取 subagent 的 `variablesSchema`
+2. 从运行时上下文注入局部变量（如 `username`、仓库子集信息、任务上下文等）
+3. 仅对 schema 定义变量做校验与注入
+4. 对未知变量处理采用策略（ignore/warn/error 可配置）
 
-难点更高：工具数量膨胀、名称稳定性、上下文噪声、UI 显示复杂度。
+注意：
 
-## 3.3 策略接口（升级版）
+- `username/repos_count/...` 只能作为“可选 runtime source”，不能成为强制硬编码字段。
+- 只有 schema 声明需要时才注入/校验。
+
+## 4. 策略模式重构（按新目标）
 
 建议目录：`src/lib/agents/sub-agent/strategies/`
 
-1. `ContractResolveStrategy`
-- 输入：`profileId, contractId, runtimeContext`
-- 输出：`resolvedProfile, resolvedContract`
+1. `SubAgentResolveStrategy`
+- 输入：`parentAgentId, toolConfig, customParams`
+- 输出：`resolvedSubAgentDefinition`
 
-2. `ContractInputValidationStrategy`
-- 输入：`args, inputSchema`
-- 输出：`validatedArgs`
+2. `VariableResolutionStrategy`
+- 输入：`variablesSchema, runtimeSources`
+- 输出：`resolvedVariables`
+- 作用：实现“字段名不固定”的变量动态解析
 
-3. `PayloadSelectionStrategy`
-- 输入：`repos, payloadRef, payloadPolicy`
+3. `PromptRenderStrategy`
+- 输入：`systemPrompt, resolvedVariables`
+- 输出：`finalSystemPrompt`
+
+4. `PayloadSelectionStrategy`
+- 输入：`repos, subagentConfig, runtimeContext`
 - 输出：`selectedRepos, payloadMeta`
+- 说明：payload 信息来自运行时/调度上下文，不在 tool 参数中显式传入
 
-4. `TaskBuildStrategy`
-- 输入：`resolvedContract, validatedArgs, runtimeContext, payloadMeta`
-- 输出：`taskText, runtimeVars`
-
-5. `ExecutionPolicyStrategy`
-- 输入：`executionPolicy, task, profile, runtimeContext`
-- 输出：`executorConfig`（模型、工具白名单、超时、附加约束）
-
-6. `SubAgentToolResolutionStrategy`
-- 输入：`toolIds, runtimeContext, executionPolicy`
+5. `ToolResolutionStrategy`
+- 输入：`toolIds, runtimeContext`
 - 输出：`tools`
 
+6. `ExecutionPolicyStrategy`
+- 输入：`subagentConfig, task, runtimeContext`
+- 输出：`timeout/model/toolLimits/...`
+
 7. `OrchestrationPolicyStrategy`
-- 输入：`agentId, requestContext`
-- 输出：`maxCycles, timeoutMs, waitMode`
+- 输入：`parentAgentId/requestContext`
+- 输出：`maxCycles, waitTimeout`
 
-## 4. master 与 subagent 断联治理（按新模型）
+## 5. master/agent 与 subagent 的交互改造
 
-## 4.1 新增 `listSubAgentContracts` tool（必须）
+## 5.1 交互路径（去掉模型选 subagent）
 
-返回：
+调用路径统一为：
 
-- profile 基础信息
-- 可用 `contractId/name/description`
-- 每个 contract 的参数摘要（从 schema 提取）
+1. 配置阶段：用户在设置里将 `createSubAgent` 绑定到一个或多个 subagent。
+2. 运行阶段：主 agent 仅调用 `createSubAgent({ task })`。
+3. 运行时：`SubAgentResolveStrategy` 按预配置绑定选择目标 subagent。
 
-master 调用流程改为：
+说明：
 
-1. `listSubAgentContracts`
-2. 选择 `profileId + contractId`
-3. `createSubAgent({ profileId, contractId, args, payloadRef })`
+- 不再需要主 agent 选择 `subagentId`。
+- 若存在多绑定，选择逻辑由策略完成（例如轮询、按标签、按负载）。
 
-## 4.2 Prompt 与运行时一致化
+## 5.2 create-subagent 的职责边界
 
-master 默认提示词改成“必须先发现 contract 再创建”，避免模型直接猜参数结构。
+`create-subagent` 只做：
 
-## 5. 分阶段实施（更新）
+- subagent 选择与校验
+- 按预配置绑定解析目标 subagent
+- 变量解析与提示词渲染
+- 任务入队
 
-## Phase S1：引入契约模型与默认策略（不改现有交互表面）
+不再做：
 
-- 扩展 `SubAgentProfile` 增加 `taskContracts`
-- 提供兼容转换：把旧 `taskDescriptionRequirement + varSchema` 映射为一个默认 contract
-- 实现 `ContractResolve + Validation + TaskBuild` 默认策略
-- `createSubAgent` 切换为 `{ profileId, contractId, args, payloadRef }` 内核
+- 任务模板拼装
+- 固定 payload 类型分支
+- 固定内置变量分支
 
-验收：
+## 6. 分阶段实施计划（修订）
 
-- 能通过 contract 动态校验参数并创建任务
-- `bun lint`、`bun tsc` 通过
+## Phase A：模型收敛
 
-## Phase S2：断联治理
+- `SubAgentProfile` 字段收敛为“profile 即 subagent”
+- 去除 `taskDescriptionRequirement` 及相关 UI/执行依赖
+- settings 面板文案改为 SubAgent 定义编辑
 
-- 新增 `listSubAgentContracts` tool
-- 更新 master 默认提示词和工具调用路径
-- 前端展示 contract 与参数摘要（帮助人类配置）
+## Phase B：Tool 协议重构
 
-验收：
+- `createSubAgent` 入参改为 `{ task }`
+- 在 Agent Settings 中为 `createSubAgent` 增加 `boundSubAgentIds` 配置
+- 默认提示词改为“按预配置 subagent 派发任务”，不再要求模型选择 subagent
+- 增加运行时变量注入管线（不走 tool 入参）
 
-- master 不再依赖“猜 profileId/猜参数结构”
+## Phase C：策略化替换硬编码
 
-## Phase S3：执行策略可插拔
+- 引入上述 7 个策略接口及默认实现
+- `create-sub-agent.ts`、`executor.ts`、`tool-factory.ts` 去硬编码逻辑
 
-- 引入 `executionPolicy`，在 executor 中按策略装配上下文和工具
-- 编排参数接入 `OrchestrationPolicyStrategy`
+## Phase D：联调与收口
 
-验收：
+- 更新消息渲染、错误提示（变量缺失/类型错误/未找到 subagent）
+- `bun lint`、`bun tsc` 全量通过
 
-- 新任务类型只需加 contract/策略，无需改 create-sub-agent 主流程
+## 7. 主要难点与问题（直接说明）
 
-## 6. 文件结构建议（更新）
+1. AI SDK tool schema 与“动态字段”冲突
+- 单个 tool 的 schema 本质是固定的。
+- 处理方式：tool 入参采用固定外壳（`variables: Record<string, unknown>`），细粒度校验在运行时完成。
 
-```text
-src/lib/agents/sub-agent/
-  contracts/
-    contract-schema.ts
-    contract-catalog.ts
-  strategies/
-    interfaces.ts
-    default/
-      contract-resolve.ts
-      contract-validate.ts
-      payload-selection.ts
-      task-build.ts
-      execution-policy.ts
-      tool-resolution.ts
-      orchestration-policy.ts
-    registry.ts
-  runtime-context.ts
-```
+2. 绑定缺失/歧义
+- 若未配置 `boundSubAgentIds` 或配置了多个但缺少选择策略，会导致运行时不可决策。
+- 处理方式：配置校验 + 默认单绑定策略 + 明确错误码（`SUBAGENT_BINDING_MISSING` / `SUBAGENT_BINDING_AMBIGUOUS`）。
 
-## 7. 直接说明：会遇到的问题与难点
+3. 提示词变量可发现性与可控性
+- 变量不再由模型显式传参，需确保模型知道“可用变量名”以正确编写系统提示词。
+- 处理方式：设置面板展示可注入变量清单；运行时渲染时返回结构化缺失变量错误（`SUBAGENT_VAR_MISSING`）。
 
-1. AI SDK tool schema 与“动态参数”冲突
-- 单个 tool 的输入 schema 在一次请求内通常是固定的。
-- 解决：使用“固定外壳 + runtime schema 校验”，或生成动态多 tool（复杂）。
+4. UI 编辑器与运行时一致性
+- 如果前端 schema 编辑和后端解析实现不一致，会出现“UI 可配但运行报错”。
+- 处理方式：共享 schema/validator 模块，不做前后端两套规则。
 
-2. Contract Schema 的可读性与模型可用性
-- JSON Schema 太复杂时，模型仍会填错参数。
-- 解决：`listSubAgentContracts` 返回“简化参数摘要 + 示例”，并在错误时返回结构化校验信息。
+5. 历史数据与过渡期
+- 当前存量数据仍有旧字段（如 taskDescriptionRequirement）。
+- 若你坚持不兼容旧配置，可直接做破坏式切换；代价是旧配置失效需重建。
 
-3. Profile/Contract 版本漂移
-- 任务创建时和执行时 profile 可能被用户修改。
-- 解决：任务入队时保存 profile+contract snapshot（不可变快照）。
+6. 多 agent 共用 subagent 的权限边界
+- 任何 agent 都能创建任意 subagent 时，需防止工具越权/误用。
+- 处理方式：在 subagent 定义中加入可选 `allowedParentAgents`（默认 all）策略校验。
 
-4. 执行策略过度抽象风险
-- 策略过多会造成排查困难。
-- 解决：先仅实现默认策略，策略粒度保持中等，不做插件化框架。
+7. 执行逻辑“不同任务不同策略”如何表达
+- 若全部依赖自然语言 `task`，可控性较差。
+- 处理方式：先通过 `executionPolicy` + prompt 约束；必要时后续再引入显式 `mode` 字段。
 
-5. 前后端配置一致性
-- UI 展示 contract 与运行时解析 contract 若不一致会产生隐性 bug。
-- 解决：共享同一 schema/validator 模块，不在前端手写另一套规则。
+## 8. 验收标准（修订）
 
-6. 任务结果结构化与恢复链路
-- contract 不同意味着 output 结构可能不同，master 恢复消息难统一。
-- 解决：先统一封装 `summary + rawOutput + contractId`，再按 contract 做增强渲染。
-
-7. 工具数量与上下文成本
-- 若采用“每 contract 一个 tool”，上下文 token 和选择复杂度都会升高。
-- 解决：先用单 tool 外壳方案（A），后续按热点 contract 再做专用 tool。
-
-## 8. 验收清单（更新）
-
-- `createSubAgent` 不再假定固定业务参数结构。
-- 不同 profile/contract 能定义不同 `inputSchema` 并被运行时校验。
-- 新增 `listSubAgentContracts`，master 可先发现后调用。
-- 任务执行使用 contract snapshot，避免配置漂移。
-- `bun lint`、`bun tsc` 全量通过。
-
+- profile 与 subagent 语义合并，无模板概念残留。
+- `create-subagent` 不依赖固定变量字段名。
+- `create-subagent` 入参仅保留 `task`，不接受 `variables/payloadRef`。
+- 主 agent 不传 `subagentId`，目标 subagent 完全由预配置绑定决定。
+- 变量解析由 schema + 策略驱动，不在工具中硬编码分支。
+- `bun lint`、`bun tsc` 通过。

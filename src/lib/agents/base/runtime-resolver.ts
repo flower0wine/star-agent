@@ -136,6 +136,7 @@ export function resolveAgentRuntime(input: ResolveRuntimeInput): ResolvedRuntime
       customParams: agentConfig?.customParams,
       staticParams: agentConfig?.staticParams,
       patentRuntimeConfig: runtimeConfig,
+      toolConfig: agentConfig?.toolConfigs?.[toolId],
     });
     tools[toolId] = wrapToolWithDefaultInput(rawTool, agentConfig?.toolConfigs?.[toolId]?.defaultInput);
   }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/agents/tool-registry";
 import type { ToolCategory, ToolMeta } from "@/lib/agents/tool-registry";
 import { getToolInputSchema } from "@/lib/agents/base/tool-definitions";
+import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
 import { validateDefaultInputWithSchema } from "@/lib/agents/base/tool-default-validator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,17 +18,37 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 interface AgentToolCenterProps {
   agentId: string;
-  toolConfigs: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>;
+  subAgentProfiles?: SubAgentProfile[];
+  toolConfigs: Record<string, {
+    enabled?: boolean;
+    defaultInput?: Record<string, unknown>;
+    boundSubAgentIds?: string[];
+  }>;
   onToolConfigChange: (
     toolId: string,
-    config: { enabled?: boolean; defaultInput?: Record<string, unknown> }
+    config: {
+      enabled?: boolean;
+      defaultInput?: Record<string, unknown>;
+      boundSubAgentIds?: string[];
+    }
   ) => void;
   onToolConfigsChange: (
-    next: Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown> }>
+    next: Record<string, {
+      enabled?: boolean;
+      defaultInput?: Record<string, unknown>;
+      boundSubAgentIds?: string[];
+    }>
   ) => void;
 }
 
@@ -43,6 +64,7 @@ function groupToolsByCategory(tools: ToolMeta[]): Record<ToolCategory, ToolMeta[
 
 export function AgentToolCenter({
   agentId,
+  subAgentProfiles = [],
   toolConfigs,
   onToolConfigChange,
   onToolConfigsChange,
@@ -65,6 +87,10 @@ export function AgentToolCenter({
   const enabledToolSet = useMemo(() => new Set(effectiveEnabledTools), [effectiveEnabledTools]);
   const [defaultInputDrafts, setDefaultInputDrafts] = useState<Record<string, string>>({});
   const [defaultInputErrors, setDefaultInputErrors] = useState<Record<string, string | undefined>>({});
+  const enabledSubAgentProfiles = useMemo(
+    () => subAgentProfiles.filter(profile => profile.enabled),
+    [subAgentProfiles]
+  );
 
   useEffect(() => {
     const nextDrafts: Record<string, string> = {};
@@ -159,6 +185,14 @@ export function AgentToolCenter({
     } catch {
       setDefaultInputErrors(current => ({ ...current, [toolId]: "JSON 语法错误" }));
     }
+  };
+
+  const handleBoundSubAgentChange = (toolId: string, value: string) => {
+    if (value === "__none__") {
+      onToolConfigChange(toolId, { boundSubAgentIds: undefined });
+      return;
+    }
+    onToolConfigChange(toolId, { boundSubAgentIds: [value] });
   };
 
   return (
@@ -264,6 +298,30 @@ export function AgentToolCenter({
                       <span className="line-clamp-2 text-xs text-muted-foreground">
                         {tool.description}
                       </span>
+                      {tool.id === "createSubAgent" && (
+                        <span className="mt-2 block space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">绑定 SubAgent</Label>
+                          <Select
+                            value={toolConfigs[tool.id]?.boundSubAgentIds?.[0] || "__none__"}
+                            onValueChange={(value) => handleBoundSubAgentChange(tool.id, value)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="选择绑定的 SubAgent" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">未绑定</SelectItem>
+                              {enabledSubAgentProfiles.map((profile) => (
+                                <SelectItem key={profile.id} value={profile.id}>
+                                  {profile.name} ({profile.id})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className="block text-[11px] text-muted-foreground">
+                            仅支持单绑定。运行时将自动使用该 SubAgent，模型无需传入 subagentId。
+                          </span>
+                        </span>
+                      )}
                       <span className="mt-2 block space-y-1">
                         <Label className="text-[11px] text-muted-foreground">默认参数（JSON，可选）</Label>
                         <Textarea

@@ -16,7 +16,6 @@ const subAgentProfileSchema = z.object({
   enabled: z.boolean(),
   toolIds: z.array(z.string().min(1)).min(1),
   systemPromptTemplate: z.string().min(1),
-  taskDescriptionRequirement: z.string().min(1),
   varSchema: z.record(z.string().regex(variableNameRegex), subAgentVarDefSchema),
   limits: z.object({
     timeoutMs: z.number().int().min(1000).max(600000),
@@ -25,43 +24,6 @@ const subAgentProfileSchema = z.object({
 });
 
 const subAgentProfilesSchema = z.array(subAgentProfileSchema);
-
-function normalizeLegacyProfiles(raw: unknown): unknown {
-  if (!Array.isArray(raw)) {
-    return raw;
-  }
-
-  return raw.map((item) => {
-    if (!item || typeof item !== "object") {
-      return item;
-    }
-
-    const profile = item as Record<string, unknown>;
-    if (typeof profile.taskDescriptionRequirement === "string" && profile.taskDescriptionRequirement.trim().length > 0) {
-      return profile;
-    }
-
-    const templates = profile.templates;
-    if (!Array.isArray(templates) || templates.length === 0) {
-      return profile;
-    }
-
-    const firstTemplate = templates[0];
-    if (!firstTemplate || typeof firstTemplate !== "object") {
-      return profile;
-    }
-
-    const instructionTemplate = (firstTemplate as Record<string, unknown>).instructionTemplate;
-    if (typeof instructionTemplate !== "string" || instructionTemplate.trim().length === 0) {
-      return profile;
-    }
-
-    return {
-      ...profile,
-      taskDescriptionRequirement: instructionTemplate,
-    };
-  });
-}
 
 export class SubAgentConfigError extends Error {
   code: string;
@@ -74,8 +36,7 @@ export class SubAgentConfigError extends Error {
 }
 
 export function parseSubAgentProfiles(raw: unknown): SubAgentProfile[] {
-  const normalized = normalizeLegacyProfiles(raw);
-  const parsed = subAgentProfilesSchema.safeParse(normalized);
+  const parsed = subAgentProfilesSchema.safeParse(raw);
   if (!parsed.success) {
     throw new SubAgentConfigError(
       "SUBAGENT_PROFILE_SCHEMA_INVALID",

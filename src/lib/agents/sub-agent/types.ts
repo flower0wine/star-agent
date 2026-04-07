@@ -22,19 +22,11 @@ export interface SubAgentProfile {
   enabled: boolean;
   toolIds: string[];
   systemPromptTemplate: string;
-  taskDescriptionRequirement: string;
   varSchema: Record<string, SubAgentVarDef>;
   limits: {
     timeoutMs: number;
   };
   version: number;
-}
-
-export type SubAgentPayloadType = "repos-range" | "repos-list" | "custom";
-
-export interface SubAgentPayloadRef {
-  type: SubAgentPayloadType;
-  data: unknown;
 }
 
 export interface SubAgentMetadata {
@@ -67,10 +59,8 @@ export interface SubAgentTask {
   profileVersion: number;
   /** Origin tool name */
   originTool: string;
-  /** Runtime payload reference */
-  payloadRef?: SubAgentPayloadRef;
-  /** Variable snapshot for task-description rendering */
-  taskVars: Record<string, string | number | boolean>;
+  /** Variable snapshot for runtime prompt rendering */
+  runtimeVars: Record<string, string | number | boolean>;
   /** Profile snapshot for deterministic execution */
   profileSnapshot: SubAgentProfile;
   /** Repository list to process */
