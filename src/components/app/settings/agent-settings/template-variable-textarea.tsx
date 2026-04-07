@@ -1,22 +1,11 @@
-import { useMemo, useRef, useState } from "react";
-import { BracesIcon, PlusIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Popover,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { useMemo } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import type { Completion, CompletionContext } from "@codemirror/autocomplete";
+import { autocompletion } from "@codemirror/autocomplete";
+import { EditorView, Decoration, MatchDecorator, ViewPlugin, placeholder as cmPlaceholder } from "@codemirror/view";
+import { BracesIcon } from "lucide-react";
+import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
 
 interface TemplateVariableTextareaProps {
   value: string;
@@ -30,6 +19,67 @@ function toPlaceholder(variable: string): string {
   return `{{${variable}}}`;
 }
 
+function createCompletionOption(variable: string): Completion {
+  return {
+    label: variable,
+    detail: toPlaceholder(variable),
+    type: "variable",
+    apply: (view, _completion, from, to) => {
+      const token = toPlaceholder(variable);
+      view.dispatch({
+        changes: { from, to, insert: token },
+        selection: { anchor: from + token.length },
+      });
+    },
+  };
+}
+
+function createTemplateCompletionSource(completionOptions: Completion[]) {
+  return (context: CompletionContext) => {
+    const match = context.matchBefore(/\{\{\s*[\w.-]*/);
+    if (!match) {
+      return null;
+    }
+    if (match.from === match.to && !context.explicit) {
+      return null;
+    }
+
+    const query = match.text.replace(/^\{\{\s*/, "").toLowerCase();
+    const filtered = query
+      ? completionOptions.filter(option => option.label.toLowerCase().includes(query))
+      : completionOptions;
+
+    return {
+      from: match.from,
+      to: match.to,
+      options: filtered,
+      filter: false,
+    };
+  };
+}
+
+const templateVariableMatcher = new MatchDecorator({
+  regexp: /\{\{\s*[\w.-]+\s*\}\}/g,
+  decoration: Decoration.mark({ class: "cm-template-variable" }),
+});
+
+const templateVariableHighlight = ViewPlugin.fromClass(
+  class {
+    decorations;
+
+    constructor(view: EditorView) {
+      this.decorations = templateVariableMatcher.createDeco(view);
+    }
+
+    update(update: Parameters<typeof templateVariableMatcher.updateDeco>[0]) {
+      this.decorations = templateVariableMatcher.updateDeco(update, this.decorations);
+    }
+  },
+  {
+    decorations: instance => instance.decorations,
+  }
+);
+
 export function TemplateVariableTextarea({
   value,
   onChange,
@@ -37,78 +87,108 @@ export function TemplateVariableTextarea({
   rows = 4,
   placeholder,
 }: TemplateVariableTextareaProps) {
-  const [open, setOpen] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { resolvedTheme } = useTheme();
   const sortedVars = useMemo(() => [...new Set(variables)].sort(), [variables]);
-
-  const insertVariable = (variable: string) => {
-    const token = toPlaceholder(variable);
-    const target = textareaRef.current;
-    if (!target) {
-      onChange(`${value}${token}`);
-      return;
-    }
-
-    const start = target.selectionStart ?? value.length;
-    const end = target.selectionEnd ?? value.length;
-    const nextValue = `${value.slice(0, start)}${token}${value.slice(end)}`;
-    onChange(nextValue);
-
-    requestAnimationFrame(() => {
-      const cursor = start + token.length;
-      target.focus();
-      target.setSelectionRange(cursor, cursor);
-    });
-  };
+  const completionOptions = useMemo(() => sortedVars.map(createCompletionOption), [sortedVars]);
+  const editorExtensions = useMemo(
+    () => [
+      EditorView.lineWrapping,
+      cmPlaceholder(placeholder || ""),
+      autocompletion({
+        activateOnTyping: true,
+        closeOnBlur: true,
+        icons: false,
+        override: [createTemplateCompletionSource(completionOptions)],
+      }),
+      EditorView.theme({
+        "&": {
+          fontSize: "0.875rem",
+          minHeight: `${Math.max(rows, 3) * 1.5}rem`,
+          backgroundColor: "var(--background)!important",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-md)",
+          transition: "border-color .2s, box-shadow .2s",
+        },
+        "&.cm-focused": {
+          outline: "none",
+          borderColor: "var(--ring)",
+          boxShadow: "0 0 0 1px var(--ring)",
+        },
+        ".cm-scroller": {
+          fontFamily: "var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          lineHeight: "1.6",
+          backgroundColor: "var(--background)!important",
+          borderRadius: "inherit",
+        },
+        ".cm-gutters": {
+          backgroundColor: "var(--background)!important",
+          borderRight: "none",
+          borderRadius: "inherit",
+        },
+        ".cm-content": {
+          padding: "0.625rem 0.75rem",
+          caretColor: "var(--foreground)",
+        },
+        ".cm-tooltip": {
+          zIndex: "60",
+        },
+        ".cm-tooltip.cm-tooltip-autocomplete": {
+          border: "1px solid var(--border)",
+          backgroundColor: "var(--popover)!important",
+          color: "var(--popover-foreground)",
+          borderRadius: "0.5rem",
+          boxShadow: "0 12px 32px -16px color-mix(in oklch, var(--foreground) 30%, transparent)",
+          overflow: "hidden",
+          padding: "0.25rem",
+        },
+        ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+          padding: "0",
+          margin: "0",
+        },
+        ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+          borderRadius: "0.375rem",
+        },
+        ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+          backgroundColor: "var(--accent)!important",
+          color: "var(--accent-foreground)",
+        },
+        ".cm-template-variable": {
+          color: "var(--primary)",
+          fontWeight: "600",
+          backgroundColor: "color-mix(in oklch, var(--primary) 14%, transparent)",
+          borderRadius: "0.25rem",
+          padding: "0 0.125rem",
+        },
+      }),
+      templateVariableHighlight,
+    ],
+    [completionOptions, placeholder, rows]
+  );
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button type="button" size="sm" variant="outline">
-              <PlusIcon className="size-3.5" />
-              插入变量
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 p-0">
-            <PopoverHeader className="px-3 pt-3 pb-1">
-              <PopoverTitle className="flex items-center gap-2 text-sm">
-                <BracesIcon className="size-4" />
-                变量选择器
-              </PopoverTitle>
-            </PopoverHeader>
-            <Command>
-              <CommandInput placeholder="搜索变量..." />
-              <CommandList>
-                <CommandEmpty>未找到变量</CommandEmpty>
-                <CommandGroup>
-                  {sortedVars.map(variable => (
-                    <CommandItem
-                      key={variable}
-                      value={variable}
-                      onSelect={() => {
-                        insertVariable(variable);
-                        setOpen(false);
-                      }}
-                    >
-                      <span className="font-mono text-xs">{toPlaceholder(variable)}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <BracesIcon className="size-3.5" />
+        输入 <span className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{`{{`}</span> 触发变量建议
       </div>
-
-      <Textarea
-        ref={textareaRef}
-        rows={rows}
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        placeholder={placeholder}
-      />
+      <div
+        className={cn(
+          "overflow-visible rounded-lg bg-background"
+        )}
+      >
+        <CodeMirror
+          value={value}
+          onChange={nextValue => onChange(nextValue)}
+          theme={resolvedTheme === "dark" ? "dark" : "light"}
+          extensions={editorExtensions}
+          basicSetup={{
+            lineNumbers: false,
+            foldGutter: false,
+            highlightActiveLine: false,
+            highlightActiveLineGutter: false,
+          }}
+        />
+      </div>
     </div>
   );
 }

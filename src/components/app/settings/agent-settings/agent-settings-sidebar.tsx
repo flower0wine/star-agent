@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { BotIcon, ChevronDownIcon, WorkflowIcon } from "lucide-react";
+import { BotIcon, ChevronDownIcon, DotIcon, WorkflowIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
 
 export interface AgentSidebarItem {
   id: string;
@@ -17,6 +19,7 @@ interface AgentSettingsSidebarProps {
   items: AgentSidebarItem[];
   activeAgentId: string;
   activePanel: AgentPanelType;
+  subAgentCounts: Record<string, number>;
   onSelect: (panel: AgentPanelType, agentId: string) => void;
 }
 
@@ -24,20 +27,29 @@ export function AgentSettingsSidebar({
   items,
   activeAgentId,
   activePanel,
+  subAgentCounts,
   onSelect,
 }: AgentSettingsSidebarProps) {
-  const agentsOpen = activePanel === "agents";
-  const subAgentsOpen = activePanel === "subagents";
+  const [agentsOpen, setAgentsOpen] = useState(true);
+  const [subAgentsOpen, setSubAgentsOpen] = useState(true);
+
+  useEffect(() => {
+    if (activePanel === "agents") {
+      setAgentsOpen(true);
+      return;
+    }
+    setSubAgentsOpen(true);
+  }, [activePanel]);
 
   return (
     <aside className="h-full min-h-0 overflow-y-auto rounded-2xl border bg-muted/20 p-2">
-      <div className="mb-1 flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+      <div className="mb-2 flex items-center gap-2 rounded-lg border border-border/70 bg-background/60 px-2 py-2 text-xs text-muted-foreground">
         <BotIcon className="size-3.5" />
-        <span>Agent Console</span>
+        <span className="font-medium">Agent Console</span>
       </div>
 
       <div className="space-y-2">
-        <Collapsible open={agentsOpen}>
+        <Collapsible open={agentsOpen} onOpenChange={setAgentsOpen}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -47,7 +59,12 @@ export function AgentSettingsSidebar({
                 <BotIcon className="size-4" />
                 Agents
               </span>
-              <ChevronDownIcon className={cn("size-4 transition-transform", agentsOpen ? "rotate-180" : "")} />
+              <span className="ml-auto mr-1 flex min-w-0 items-center justify-end">
+                <Badge variant="secondary" className="h-5 rounded-full px-2 text-[11px] tabular-nums">
+                  {items.length}
+                </Badge>
+              </span>
+              <ChevronDownIcon className={cn("size-4 shrink-0 transition-transform", agentsOpen ? "rotate-180" : "")} />
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-1 pt-1">
@@ -59,23 +76,27 @@ export function AgentSettingsSidebar({
                   type="button"
                   onClick={() => onSelect("agents", item.id)}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                    "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                     isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-foreground/80 hover:bg-accent/70 hover:text-foreground"
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-transparent text-foreground/80 hover:border-border/70 hover:bg-accent/70 hover:text-foreground"
                   )}
                 >
                   <span className="flex size-6 items-center justify-center rounded-md border bg-background/70">
                     {item.icon}
                   </span>
-                  <span className="truncate">{item.name}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{item.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                  </span>
+                  {isActive && <DotIcon className="size-5 text-primary" />}
                 </button>
               );
             })}
           </CollapsibleContent>
         </Collapsible>
 
-        <Collapsible open={subAgentsOpen}>
+        <Collapsible open={subAgentsOpen} onOpenChange={setSubAgentsOpen}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -85,28 +106,40 @@ export function AgentSettingsSidebar({
                 <WorkflowIcon className="size-4" />
                 SubAgents
               </span>
-              <ChevronDownIcon className={cn("size-4 transition-transform", subAgentsOpen ? "rotate-180" : "")} />
+              <span className="ml-auto mr-1 flex min-w-0 items-center justify-end">
+                <Badge variant="secondary" className="h-5 rounded-full px-2 text-[11px] tabular-nums">
+                  {Object.values(subAgentCounts).reduce((acc, value) => acc + value, 0)}
+                </Badge>
+              </span>
+              <ChevronDownIcon className={cn("size-4 shrink-0 transition-transform", subAgentsOpen ? "rotate-180" : "")} />
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-1 pt-1">
             {items.map((item) => {
               const isActive = activePanel === "subagents" && activeAgentId === item.id;
+              const profileCount = subAgentCounts[item.id] || 0;
               return (
                 <button
                   key={`subagents-${item.id}`}
                   type="button"
                   onClick={() => onSelect("subagents", item.id)}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                    "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                     isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-foreground/80 hover:bg-accent/70 hover:text-foreground"
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-transparent text-foreground/80 hover:border-border/70 hover:bg-accent/70 hover:text-foreground"
                   )}
                 >
                   <span className="flex size-6 items-center justify-center rounded-md border bg-background/70">
                     {item.icon}
                   </span>
-                  <span className="truncate">{item.name}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{item.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {profileCount > 0 ? `${profileCount} 个 Profiles` : "暂无 Profiles"}
+                    </span>
+                  </span>
+                  {isActive && <DotIcon className="size-5 text-primary" />}
                 </button>
               );
             })}

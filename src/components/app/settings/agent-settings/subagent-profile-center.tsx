@@ -1,5 +1,5 @@
 import { CopyIcon, PlusIcon, TrashIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   SubAgentProfile,
   SubAgentTaskTemplate,
@@ -26,7 +26,7 @@ import { TemplateVariableTextarea } from "./template-variable-textarea";
 interface SubAgentProfileCenterProps {
   defaultParentAgentId: string;
   profiles: SubAgentProfile[];
-  onChange: (profiles: SubAgentProfile[]) => void;
+  onChange: (profiles: SubAgentProfile[]) => Promise<void> | void;
 }
 
 function createDefaultTemplate(index: number): SubAgentTaskTemplate {
@@ -81,24 +81,40 @@ export function SubAgentProfileCenter({
 }: SubAgentProfileCenterProps) {
   const tools = useMemo(() => getSubAgentCompatibleTools(), []);
   const builtInVariables = useMemo(() => ["username", "repos_count", "repos_context", "start_index", "end_index"], []);
+  const [draftProfiles, setDraftProfiles] = useState<SubAgentProfile[]>(profiles);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setDraftProfiles(profiles);
+    setIsDirty(false);
+  }, [profiles]);
+
+  const updateDraftProfiles = (updater: (current: SubAgentProfile[]) => SubAgentProfile[]) => {
+    setDraftProfiles((current) => {
+      const next = updater(current);
+      return next;
+    });
+    setIsDirty(true);
+  };
 
   const upsertProfile = (profileId: string, updater: (profile: SubAgentProfile) => SubAgentProfile) => {
-    onChange(profiles.map(profile => (profile.id === profileId ? updater(profile) : profile)));
+    updateDraftProfiles(current => current.map(profile => (profile.id === profileId ? updater(profile) : profile)));
   };
 
   const handleAddProfile = () => {
-    const index = profiles.length + 1;
-    onChange([...profiles, createDefaultProfile(defaultParentAgentId, index)]);
+    const index = draftProfiles.length + 1;
+    updateDraftProfiles(current => [...current, createDefaultProfile(defaultParentAgentId, index)]);
   };
 
   const handleDuplicateProfile = (profileId: string) => {
-    const profile = profiles.find(item => item.id === profileId);
+    const profile = draftProfiles.find(item => item.id === profileId);
     if (!profile) {
       return;
     }
     const duplicatedId = `${profile.id}-copy-${Date.now().toString().slice(-4)}`;
-    onChange([
-      ...profiles,
+    updateDraftProfiles(current => [
+      ...current,
       {
         ...profile,
         id: duplicatedId,
@@ -109,7 +125,25 @@ export function SubAgentProfileCenter({
   };
 
   const handleDeleteProfile = (profileId: string) => {
-    onChange(profiles.filter(profile => profile.id !== profileId));
+    updateDraftProfiles(current => current.filter(profile => profile.id !== profileId));
+  };
+
+  const handleReset = () => {
+    setDraftProfiles(profiles);
+    setIsDirty(false);
+  };
+
+  const handleSave = async () => {
+    if (!isDirty || isSaving) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onChange(draftProfiles);
+      setIsDirty(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const updateTemplate = (
@@ -157,13 +191,13 @@ export function SubAgentProfileCenter({
         </div>
       </CardHeader>
       <CardContent className="space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
-        {profiles.length === 0 && (
+        {draftProfiles.length === 0 && (
           <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
             当前没有 SubAgent Profile，请先创建。
           </div>
         )}
 
-        {profiles.map((profile) => {
+        {draftProfiles.map((profile) => {
           const variableOptions = [...new Set([...Object.keys(profile.varSchema), ...builtInVariables])];
 
           return (
@@ -325,25 +359,34 @@ export function SubAgentProfileCenter({
                           instructionTemplate: nextValue,
                         }))}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      必填变量用于执行前校验；允许变量用于限制该模板可使用的变量范围。
+                    </p>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <Input
-                        value={template.requiredVars.join(",")}
-                        onChange={(event) =>
-                          updateTemplate(profile.id, template.id, current => ({
-                            ...current,
-                            requiredVars: parseCommaSeparated(event.target.value),
-                          }))}
-                        placeholder="required vars"
-                      />
-                      <Input
-                        value={template.allowedVars.join(",")}
-                        onChange={(event) =>
-                          updateTemplate(profile.id, template.id, current => ({
-                            ...current,
-                            allowedVars: parseCommaSeparated(event.target.value),
-                          }))}
-                        placeholder="allowed vars"
-                      />
+                      <div className="space-y-1">
+                        <Label>必填变量 (requiredVars)</Label>
+                        <Input
+                          value={template.requiredVars.join(",")}
+                          onChange={(event) =>
+                            updateTemplate(profile.id, template.id, current => ({
+                              ...current,
+                              requiredVars: parseCommaSeparated(event.target.value),
+                            }))}
+                          placeholder="例如: username,repos_count"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>允许变量 (allowedVars)</Label>
+                        <Input
+                          value={template.allowedVars.join(",")}
+                          onChange={(event) =>
+                            updateTemplate(profile.id, template.id, current => ({
+                              ...current,
+                              allowedVars: parseCommaSeparated(event.target.value),
+                            }))}
+                          placeholder="例如: username,repos_count,repos_context"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -478,6 +521,33 @@ export function SubAgentProfileCenter({
             </div>
           );
         })}
+
+        <div className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pt-3 pb-1 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:-mx-5 sm:px-5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {isDirty ? "有未保存更改" : "当前配置已保存"}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!isDirty || isSaving}
+                onClick={handleReset}
+              >
+                重置
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!isDirty || isSaving}
+                onClick={() => void handleSave()}
+              >
+                {isSaving ? "保存中..." : "保存"}
+              </Button>
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

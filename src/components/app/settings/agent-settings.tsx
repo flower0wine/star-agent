@@ -444,6 +444,17 @@ export function AgentSettings() {
     () => AGENTS.find((agent) => agent.id === activeAgentId) || AGENTS[0],
     [activeAgentId]
   );
+  const subAgentProfiles = readSubAgentProfiles(
+    subAgentConfigState.config?.dynamicConfig.customParams || {}
+  );
+  const subAgentCounts = useMemo(
+    () =>
+      AGENTS.reduce<Record<string, number>>((acc, agent) => {
+        acc[agent.id] = subAgentProfiles.filter(profile => profile.parentAgentIds.includes(agent.id)).length;
+        return acc;
+      }, {}),
+    [subAgentProfiles]
+  );
 
   if (
     starConfigState.isLoading
@@ -466,7 +477,6 @@ export function AgentSettings() {
 
   const { dynamicConfig, staticConfig } = activeState.config;
   const hasToolSelectionConfigured = readToolSelectionConfigured(dynamicConfig.customParams);
-  const subAgentProfiles = readSubAgentProfiles(subAgentConfigState.config.dynamicConfig.customParams);
   const activeSubAgentProfiles = subAgentProfiles.filter(profile => profile.parentAgentIds.includes(activeAgentId));
 
   const handleToolChange = async (tools: string[]) => {
@@ -540,6 +550,7 @@ export function AgentSettings() {
             items={AGENTS}
             activeAgentId={activeAgentId}
             activePanel={activePanel}
+            subAgentCounts={subAgentCounts}
             onSelect={(panel, id) => {
               setActivePanel(panel);
               setActiveAgentId(id as AgentId);
@@ -553,8 +564,14 @@ export function AgentSettings() {
                   {activeAgent.icon}
                 </span>
                 <div className="min-w-0">
-                  <h4 className="truncate font-medium">{activeAgent.name}</h4>
-                  <p className="truncate text-xs text-muted-foreground">{activeAgent.description}</p>
+                  <h4 className="truncate font-medium">
+                    {activePanel === "agents" ? "Agent 配置" : "SubAgent 配置"} · {activeAgent.name}
+                  </h4>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {activePanel === "agents"
+                      ? activeAgent.description
+                      : `当前 Agent 下共 ${subAgentCounts[activeAgentId] || 0} 个 SubAgent Profiles`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -627,7 +644,7 @@ export function AgentSettings() {
               <SubAgentProfileCenter
                 defaultParentAgentId={activeAgentId}
                 profiles={activeSubAgentProfiles}
-                onChange={(profiles) => void handleSubAgentProfilesChange(profiles)}
+                onChange={handleSubAgentProfilesChange}
               />
             )}
           </div>
