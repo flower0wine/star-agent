@@ -32,4 +32,5 @@
 - 再创建新的基础 UI 组件前，查看 src\components\ai-elements 和 src\components\ui，已经有许多 UI 组件。ai-elements 是专门用来编写 AI 交互页面的组件，后者是基础组件。
 - 不清楚的 API 阅读相关的 Vercel AI SDK 的文档（https://ai-sdk.dev/）以获取相关的 API 参考文档。
 - 当遇到方向性问题时需要告知我，比如因为实现困难导致更改方向。但是一些文件命名不需要告知我。
+- 目前处于开发阶段，不需要考虑应用的迁移或者是旧实现的兼容问题。
 

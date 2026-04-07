@@ -197,7 +197,7 @@ function PromptCard({ id, title, description, value, onChange }: PromptCardProps
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2 px-4 pb-4 sm:px-5 sm:pb-5">
+      <CardContent className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
         <Label htmlFor={id}>附加系统提示词</Label>
         <Textarea
           id={id}
@@ -407,11 +407,41 @@ function readToolSelectionConfigured(customParams: Record<string, unknown>): boo
   return customParams.toolSelectionConfigured === true;
 }
 
-function readSubAgentProfiles(customParams: Record<string, unknown>): SubAgentProfile[] {
+function readSubAgentProfiles(customParams: Record<string, unknown>): {
+  profiles: SubAgentProfile[];
+  parseError?: string;
+} {
+  const rawProfiles = customParams.subAgentProfiles;
+
   try {
-    return parseSubAgentProfiles(customParams.subAgentProfiles);
-  } catch {
-    return [];
+    return {
+      profiles: parseSubAgentProfiles(rawProfiles),
+    };
+  } catch (error) {
+    if (!Array.isArray(rawProfiles)) {
+      return {
+        profiles: [],
+        parseError: error instanceof Error ? error.message : String(error),
+      };
+    }
+
+    // Fallback to keep valid entries visible instead of dropping the whole panel.
+    const validProfiles: SubAgentProfile[] = [];
+    for (const item of rawProfiles) {
+      try {
+        const parsed = parseSubAgentProfiles([item]);
+        if (parsed[0]) {
+          validProfiles.push(parsed[0]);
+        }
+      } catch {
+        // Ignore invalid item and continue collecting valid ones.
+      }
+    }
+
+    return {
+      profiles: validProfiles,
+      parseError: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -444,9 +474,11 @@ export function AgentSettings() {
     () => AGENTS.find((agent) => agent.id === activeAgentId) || AGENTS[0],
     [activeAgentId]
   );
-  const subAgentProfiles = readSubAgentProfiles(
+  const subAgentProfileResult = readSubAgentProfiles(
     subAgentConfigState.config?.dynamicConfig.customParams || {}
   );
+  const subAgentProfiles = subAgentProfileResult.profiles;
+  const subAgentProfilesParseError = subAgentProfileResult.parseError;
   const subAgentCounts = useMemo(
     () =>
       AGENTS.reduce<Record<string, number>>((acc, agent) => {
@@ -528,7 +560,7 @@ export function AgentSettings() {
 
   const handleSubAgentProfilesChange = async (profiles: SubAgentProfile[]) => {
     const currentCustomParams = subAgentConfigState.config?.dynamicConfig.customParams || {};
-    const allProfiles = readSubAgentProfiles(currentCustomParams);
+    const allProfiles = readSubAgentProfiles(currentCustomParams).profiles;
     const untouchedProfiles = allProfiles.filter(profile => !profile.parentAgentIds.includes(activeAgentId));
     await subAgentConfigState.updateDynamicConfig({
       customParams: {
@@ -557,7 +589,7 @@ export function AgentSettings() {
             }}
           />
 
-          <div className="h-full min-h-0 space-y-4 overflow-y-auto pr-1 lg:space-y-5">
+          <div className="h-full min-h-0 space-y-5 overflow-y-auto pr-1">
             <div className="rounded-2xl border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="flex size-8 items-center justify-center rounded-lg border bg-background/70">
@@ -578,7 +610,7 @@ export function AgentSettings() {
 
             {activePanel === "agents" && (activeAgentId === "patent"
               ? (
-                  <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="grid gap-5 xl:grid-cols-2">
                     <PatentApiConfigCard
                       staticConfig={staticConfig as PatentAgentStaticConfig}
                       customParams={dynamicConfig.customParams}
@@ -598,7 +630,7 @@ export function AgentSettings() {
                   </div>
                 )
               : (
-                  <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="grid gap-5 xl:grid-cols-2">
                     <RepositorySyncCard
                       idPrefix={activeAgentId}
                       title="仓库同步策略"
@@ -641,11 +673,23 @@ export function AgentSettings() {
             )}
 
             {activePanel === "subagents" && (
-              <SubAgentProfileCenter
-                defaultParentAgentId={activeAgentId}
-                profiles={activeSubAgentProfiles}
-                onChange={handleSubAgentProfilesChange}
-              />
+              <>
+                {subAgentProfilesParseError && (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+                    检测到部分 SubAgent 配置格式无效，已仅展示可解析配置。请保存一次以覆盖旧格式数据。
+                  </div>
+                )}
+                {activeSubAgentProfiles.length === 0 && (
+                  <div className="rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
+                    当前 Agent 下暂无 SubAgent Profile，可点击右侧区域中的“新建 Profile”开始配置。
+                  </div>
+                )}
+                <SubAgentProfileCenter
+                  defaultParentAgentId={activeAgentId}
+                  profiles={activeSubAgentProfiles}
+                  onChange={handleSubAgentProfilesChange}
+                />
+              </>
             )}
           </div>
         </div>

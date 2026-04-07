@@ -14,9 +14,7 @@ const subAgentTaskTemplateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   instructionTemplate: z.string().min(1),
-  requiredVars: z.array(z.string().regex(variableNameRegex)),
-  allowedVars: z.array(z.string().regex(variableNameRegex)),
-});
+}).strict();
 
 const subAgentProfileSchema = z.object({
   id: z.string().min(1),
@@ -72,15 +70,6 @@ export function parseSubAgentProfiles(raw: unknown): SubAgentProfile[] {
         );
       }
       templateIds.add(template.id);
-
-      for (const requiredVar of template.requiredVars) {
-        if (!template.allowedVars.includes(requiredVar)) {
-          throw new SubAgentConfigError(
-            "SUBAGENT_TEMPLATE_REQUIRED_NOT_ALLOWED",
-            `Template "${template.id}" required var "${requiredVar}" not in allowedVars`
-          );
-        }
-      }
     }
   }
 

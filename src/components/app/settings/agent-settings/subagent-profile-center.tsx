@@ -29,13 +29,35 @@ interface SubAgentProfileCenterProps {
   onChange: (profiles: SubAgentProfile[]) => Promise<void> | void;
 }
 
-function createDefaultTemplate(index: number): SubAgentTaskTemplate {
+function normalizeTemplateId(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "template";
+}
+
+function createUniqueTemplateId(base: string, existingIds: string[]): string {
+  const existing = new Set(existingIds);
+  const normalizedBase = normalizeTemplateId(base);
+  if (!existing.has(normalizedBase)) {
+    return normalizedBase;
+  }
+
+  let index = 2;
+  while (existing.has(`${normalizedBase}-${index}`)) {
+    index += 1;
+  }
+  return `${normalizedBase}-${index}`;
+}
+
+function createDefaultTemplate(index: number, existingIds: string[] = []): SubAgentTaskTemplate {
+  const name = `Template ${index}`;
   return {
-    id: `template-${index}`,
-    name: `Template ${index}`,
+    id: createUniqueTemplateId(name, existingIds),
+    name,
     instructionTemplate: "请基于 {{username}} 的仓库列表完成分析，并输出重点结论。",
-    requiredVars: ["username"],
-    allowedVars: ["username", "repos_count"],
   };
 }
 
@@ -190,7 +212,7 @@ export function SubAgentProfileCenter({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
+      <CardContent className="space-y-5 px-4 pb-4 sm:px-5 sm:pb-5">
         {draftProfiles.length === 0 && (
           <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
             当前没有 SubAgent Profile，请先创建。
@@ -201,7 +223,7 @@ export function SubAgentProfileCenter({
           const variableOptions = [...new Set([...Object.keys(profile.varSchema), ...builtInVariables])];
 
           return (
-            <div key={profile.id} className="space-y-3 rounded-xl border border-border/80 p-3">
+            <div key={profile.id} className="space-y-4 rounded-xl border border-border/80 bg-card p-4">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">v{profile.version}</Badge>
@@ -317,7 +339,7 @@ export function SubAgentProfileCenter({
                 />
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4 rounded-lg border bg-muted/10 p-3">
                 <div className="flex items-center justify-between">
                   <Label>任务模板</Label>
                   <Button
@@ -327,7 +349,13 @@ export function SubAgentProfileCenter({
                     onClick={() =>
                       upsertProfile(profile.id, current => ({
                         ...current,
-                        templates: [...current.templates, createDefaultTemplate(current.templates.length + 1)],
+                        templates: [
+                          ...current.templates,
+                          createDefaultTemplate(
+                            current.templates.length + 1,
+                            current.templates.map(item => item.id)
+                          ),
+                        ],
                         version: current.version + 1,
                       }))}
                   >
@@ -336,63 +364,46 @@ export function SubAgentProfileCenter({
                   </Button>
                 </div>
                 {profile.templates.map(template => (
-                  <div key={template.id} className="space-y-2 rounded-md border p-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Input
-                        value={template.id}
-                        onChange={(event) =>
-                          updateTemplate(profile.id, template.id, current => ({ ...current, id: event.target.value }))}
-                      />
-                      <Input
-                        value={template.name}
-                        onChange={(event) =>
-                          updateTemplate(profile.id, template.id, current => ({ ...current, name: event.target.value }))}
-                      />
+                  <div key={template.id} className="space-y-3 rounded-lg border bg-muted/15 p-3">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                      <div className="space-y-2">
+                        <Label htmlFor={`template-name-${profile.id}-${template.id}`}>模板名称</Label>
+                        <Input
+                          id={`template-name-${profile.id}-${template.id}`}
+                          value={template.name}
+                          onChange={(event) =>
+                            updateTemplate(profile.id, template.id, current => ({ ...current, name: event.target.value }))}
+                          placeholder="例如：仓库总结模板"
+                        />
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <span className="text-muted-foreground">模板 ID（自动生成）</span>
+                        <div className="rounded-md border bg-background px-2 py-1 font-mono text-[11px] text-foreground">
+                          {template.id}
+                        </div>
+                      </div>
                     </div>
-                    <TemplateVariableTextarea
-                      rows={3}
-                      value={template.instructionTemplate}
-                      variables={variableOptions}
-                      onChange={(nextValue) =>
-                        updateTemplate(profile.id, template.id, current => ({
-                          ...current,
-                          instructionTemplate: nextValue,
-                        }))}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      必填变量用于执行前校验；允许变量用于限制该模板可使用的变量范围。
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label>必填变量 (requiredVars)</Label>
-                        <Input
-                          value={template.requiredVars.join(",")}
-                          onChange={(event) =>
-                            updateTemplate(profile.id, template.id, current => ({
-                              ...current,
-                              requiredVars: parseCommaSeparated(event.target.value),
-                            }))}
-                          placeholder="例如: username,repos_count"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>允许变量 (allowedVars)</Label>
-                        <Input
-                          value={template.allowedVars.join(",")}
-                          onChange={(event) =>
-                            updateTemplate(profile.id, template.id, current => ({
-                              ...current,
-                              allowedVars: parseCommaSeparated(event.target.value),
-                            }))}
-                          placeholder="例如: username,repos_count,repos_context"
-                        />
-                      </div>
+                    <div className="space-y-1">
+                      <Label>任务指令模板</Label>
+                      <p className="text-xs text-muted-foreground">
+                        子 Agent 将基于该模板生成任务文本，可使用 <code>{"{{变量名}}"}</code>。
+                      </p>
+                      <TemplateVariableTextarea
+                        rows={3}
+                        value={template.instructionTemplate}
+                        variables={variableOptions}
+                        onChange={(nextValue) =>
+                          updateTemplate(profile.id, template.id, current => ({
+                            ...current,
+                            instructionTemplate: nextValue,
+                          }))}
+                      />
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4 rounded-lg border bg-muted/10 p-3">
                 <div className="flex items-center justify-between">
                   <Label>变量 Schema</Label>
                   <Button
@@ -413,56 +424,78 @@ export function SubAgentProfileCenter({
                     新增变量
                   </Button>
                 </div>
-                {Object.entries(profile.varSchema).map(([varName, varDef]) => (
-                  <div key={`${profile.id}-${varName}`} className="grid gap-2 sm:grid-cols-[1fr_140px_120px]">
-                    <Input
-                      value={varName}
-                      onChange={(event) =>
-                        upsertProfile(profile.id, (current) => {
-                          const nextName = event.target.value.trim();
-                          if (!nextName || nextName === varName) {
-                            return current;
-                          }
-                          const nextSchema = { ...current.varSchema };
-                          nextSchema[nextName] = nextSchema[varName];
-                          delete nextSchema[varName];
-                          return {
-                            ...current,
-                            varSchema: nextSchema,
-                            version: current.version + 1,
-                          };
-                        })}
-                    />
-                    <Select
-                      value={varDef.type}
-                      onValueChange={(value) =>
-                        updateVarSchema(profile.id, varName, current => ({
-                          ...current,
-                          type: value as TemplateVariableType,
-                        }))}
+                <p className="text-xs text-muted-foreground">
+                  变量白名单由此处变量名决定；勾选 required 后会在任务执行前强制校验必填。
+                </p>
+                <div className="hidden grid-cols-[1fr_140px_120px] gap-2 px-1 text-xs text-muted-foreground sm:grid">
+                  <span>变量名</span>
+                  <span>类型</span>
+                  <span>必填</span>
+                </div>
+                <div className="grid gap-2 rounded-md border bg-background p-2">
+                  {Object.entries(profile.varSchema).map(([varName, varDef]) => (
+                    <div
+                      key={`${profile.id}-${varName}`}
+                      className="grid gap-2 sm:grid-cols-[1fr_140px_120px]"
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="string">string</SelectItem>
-                        <SelectItem value="number">number</SelectItem>
-                        <SelectItem value="boolean">boolean</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={varDef.required === true}
-                        onCheckedChange={(checked) =>
-                          updateVarSchema(profile.id, varName, current => ({
-                            ...current,
-                            required: checked === true,
-                          }))}
-                      />
-                      required
-                    </label>
-                  </div>
-                ))}
+                      <div>
+                        <Label className="text-xs text-muted-foreground sm:hidden">变量名</Label>
+                        <Input
+                          value={varName}
+                          onChange={(event) =>
+                            upsertProfile(profile.id, (current) => {
+                              const nextName = event.target.value.trim();
+                              if (!nextName || nextName === varName) {
+                                return current;
+                              }
+                              const nextSchema = { ...current.varSchema };
+                              nextSchema[nextName] = nextSchema[varName];
+                              delete nextSchema[varName];
+                              return {
+                                ...current,
+                                varSchema: nextSchema,
+                                version: current.version + 1,
+                              };
+                            })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground sm:hidden">类型</Label>
+                        <Select
+                          value={varDef.type}
+                          onValueChange={(value) =>
+                            updateVarSchema(profile.id, varName, current => ({
+                              ...current,
+                              type: value as TemplateVariableType,
+                            }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="string">string</SelectItem>
+                            <SelectItem value="number">number</SelectItem>
+                            <SelectItem value="boolean">boolean</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground sm:hidden">必填</Label>
+                        <label className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm">
+                          <Checkbox
+                            checked={varDef.required === true}
+                            onCheckedChange={(checked) =>
+                              updateVarSchema(profile.id, varName, current => ({
+                                ...current,
+                                required: checked === true,
+                              }))}
+                          />
+                          required
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-3">

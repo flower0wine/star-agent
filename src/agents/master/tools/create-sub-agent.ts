@@ -114,7 +114,6 @@ export function createCreateSubAgentTool(
         end_index: typeof payloadData?.endIndex === "number" ? payloadData.endIndex : selectedRepos.length,
       };
       const resolvedVars = buildResolvedTemplateVars({
-        template,
         userVars: params.templateVars,
         varSchema: profile.varSchema,
         builtinVars,

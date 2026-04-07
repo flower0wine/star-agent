@@ -20,8 +20,6 @@ export interface SubAgentTaskTemplate {
   id: string;
   name: string;
   instructionTemplate: string;
-  requiredVars: string[];
-  allowedVars: string[];
 }
 
 export interface SubAgentProfile {

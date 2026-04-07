@@ -1,4 +1,4 @@
-import type { SubAgentTaskTemplate, SubAgentVarDef } from "./types";
+import type { SubAgentVarDef } from "./types";
 import { SubAgentConfigError } from "./profile-schema";
 
 const templateVarPattern = /\{\{\s*([a-z_]\w*)\s*\}\}/gi;
@@ -36,12 +36,11 @@ function assertValueType(varName: string, value: unknown, expected: SubAgentVarD
 }
 
 export function buildResolvedTemplateVars(options: {
-  template: SubAgentTaskTemplate;
   userVars: TemplateVars;
   varSchema: Record<string, SubAgentVarDef>;
   builtinVars: TemplateVars;
 }): TemplateVars {
-  const { template, userVars, varSchema, builtinVars } = options;
+  const { userVars, varSchema, builtinVars } = options;
   const merged: TemplateVars = {
     ...builtinVars,
   };
@@ -56,16 +55,16 @@ export function buildResolvedTemplateVars(options: {
     merged[name] = value;
   }
 
-  for (const requiredVar of template.requiredVars) {
-    if (merged[requiredVar] === undefined) {
-      throw new SubAgentConfigError("SUBAGENT_VAR_MISSING", `Missing required variable "${requiredVar}"`);
+  for (const [name, def] of Object.entries(varSchema)) {
+    if (def.required && merged[name] === undefined) {
+      throw new SubAgentConfigError("SUBAGENT_VAR_MISSING", `Missing required variable "${name}"`);
     }
   }
 
   for (const [name, value] of Object.entries(merged)) {
     const isBuiltin = name in BUILTIN_VAR_TYPES;
-    if (!isBuiltin && !template.allowedVars.includes(name)) {
-      throw new SubAgentConfigError("SUBAGENT_VAR_UNKNOWN", `Variable "${name}" is not allowed by template`);
+    if (!isBuiltin && !(name in varSchema)) {
+      throw new SubAgentConfigError("SUBAGENT_VAR_UNKNOWN", `Variable "${name}" is not defined in varSchema`);
     }
 
     const expectedType = varSchema[name]?.type || BUILTIN_VAR_TYPES[name];

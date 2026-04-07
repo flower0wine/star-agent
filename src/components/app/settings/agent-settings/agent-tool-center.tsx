@@ -104,7 +104,7 @@ export function AgentToolCenter({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
+      <CardContent className="space-y-5 px-4 pb-4 sm:px-5 sm:pb-5">
         {availableTools.length === 0 && (
           <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
             当前 Agent 暂无可配置工具
@@ -112,7 +112,7 @@ export function AgentToolCenter({
         )}
 
         {orderedCategories.map((category) => (
-          <section key={category} className="space-y-2">
+          <section key={category} className="space-y-3">
             <div className="flex items-center gap-2">
               <LayersIcon className="size-4 text-muted-foreground" />
               <span className="text-sm font-medium">{TOOL_CATEGORIES[category].label}</span>
