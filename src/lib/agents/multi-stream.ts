@@ -75,7 +75,6 @@ export async function createMultiStreamResponse(
         const subAgent = progress.subAgent || (task
           ? {
               profileId: task.profileId,
-              templateId: task.templateId,
               profileVersion: task.profileVersion,
               originTool: task.originTool,
             }

@@ -35,7 +35,7 @@ function formatReposForContext(repos: GitHubRepo[]): string {
 function buildSubAgentSystemPrompt(task: SubAgentTask): string {
   const reposContext = formatReposForContext(task.repos);
   const vars: Record<string, string | number | boolean> = {
-    ...task.templateVars,
+    ...task.taskVars,
     username: task.username,
     repos_count: task.repos.length,
     repos_context: reposContext,
@@ -145,7 +145,6 @@ export async function executeSubAgentTask(
           chunk: chunkObj,
           subAgent: {
             profileId: task.profileId,
-            templateId: task.templateId,
             profileVersion: task.profileVersion,
             originTool: task.originTool,
           },
@@ -169,7 +168,6 @@ export async function executeSubAgentTask(
                 progress: currentProgress,
                 subAgent: {
                   profileId: task.profileId,
-                  templateId: task.templateId,
                   profileVersion: task.profileVersion,
                   originTool: task.originTool,
                 },
@@ -192,7 +190,6 @@ export async function executeSubAgentTask(
       result: task.result,
       subAgent: {
         profileId: task.profileId,
-        templateId: task.templateId,
         profileVersion: task.profileVersion,
         originTool: task.originTool,
       },
@@ -215,7 +212,6 @@ export async function executeSubAgentTask(
       progress: currentProgress,
       subAgent: {
         profileId: task.profileId,
-        templateId: task.templateId,
         profileVersion: task.profileVersion,
         originTool: task.originTool,
       },

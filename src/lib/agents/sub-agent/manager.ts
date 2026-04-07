@@ -101,7 +101,6 @@ export class SubAgentManager {
       async: true as const,
       subAgent: {
         profileId: input.profileId,
-        templateId: input.templateId,
         profileVersion: input.profileVersion,
         originTool: input.originTool,
       },
@@ -124,7 +123,6 @@ export class SubAgentManager {
       progress: 0,
       subAgent: {
         profileId: task.profileId,
-        templateId: task.templateId,
         profileVersion: task.profileVersion,
         originTool: task.originTool,
       },
@@ -149,7 +147,6 @@ export class SubAgentManager {
         result: task.result,
         subAgent: {
           profileId: task.profileId,
-          templateId: task.templateId,
           profileVersion: task.profileVersion,
           originTool: task.originTool,
         },
@@ -166,7 +163,6 @@ export class SubAgentManager {
         progress: task.progress,
         subAgent: {
           profileId: task.profileId,
-          templateId: task.templateId,
           profileVersion: task.profileVersion,
           originTool: task.originTool,
         },

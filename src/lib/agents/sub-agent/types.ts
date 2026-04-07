@@ -16,25 +16,16 @@ export interface SubAgentVarDef {
   description?: string;
 }
 
-export interface SubAgentTaskTemplate {
-  id: string;
-  name: string;
-  instructionTemplate: string;
-}
-
 export interface SubAgentProfile {
   id: string;
   name: string;
   enabled: boolean;
-  parentAgentIds: string[];
   toolIds: string[];
   systemPromptTemplate: string;
-  templates: SubAgentTaskTemplate[];
+  taskDescriptionRequirement: string;
   varSchema: Record<string, SubAgentVarDef>;
   limits: {
-    maxConcurrency: number;
     timeoutMs: number;
-    maxInputItems?: number;
   };
   version: number;
 }
@@ -48,7 +39,6 @@ export interface SubAgentPayloadRef {
 
 export interface SubAgentMetadata {
   profileId: string;
-  templateId: string;
   profileVersion: number;
   originTool: string;
 }
@@ -73,20 +63,16 @@ export interface SubAgentTask {
   parentAgentId: string;
   /** Selected profile id */
   profileId: string;
-  /** Selected template id */
-  templateId: string;
   /** Profile version snapshot */
   profileVersion: number;
   /** Origin tool name */
   originTool: string;
   /** Runtime payload reference */
   payloadRef?: SubAgentPayloadRef;
-  /** Variable snapshot for template rendering */
-  templateVars: Record<string, string | number | boolean>;
+  /** Variable snapshot for task-description rendering */
+  taskVars: Record<string, string | number | boolean>;
   /** Profile snapshot for deterministic execution */
   profileSnapshot: SubAgentProfile;
-  /** Template snapshot for deterministic execution */
-  templateSnapshot: SubAgentTaskTemplate;
   /** Repository list to process */
   repos: GitHubRepo[];
   /** GitHub username */

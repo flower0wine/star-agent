@@ -110,7 +110,6 @@ interface CreateSubAgentToolOutput {
   __duration?: number;
   subAgent?: {
     profileId?: string;
-    templateId?: string;
     profileVersion?: number;
     originTool?: string;
   };
@@ -118,8 +117,7 @@ interface CreateSubAgentToolOutput {
 
 interface CreateSubAgentToolInput {
   profileId?: string;
-  templateId?: string;
-  templateVars?: Record<string, unknown>;
+  taskVars?: Record<string, unknown>;
   payloadRef?: {
     type?: string;
     data?: unknown;
@@ -223,7 +221,7 @@ export const MessageRenderer = memo(({
           const output = (part.output || {}) as CreateSubAgentToolOutput;
           const input = (part.input || {}) as CreateSubAgentToolInput;
           const taskId = output.taskId;
-          const subAgentLabel = [output.subAgent?.profileId, output.subAgent?.templateId]
+          const subAgentLabel = [output.subAgent?.profileId]
             .filter(Boolean)
             .join(" / ");
           const canOpen = Boolean(taskId && onOpenSubAgentPanel);
@@ -246,11 +244,9 @@ export const MessageRenderer = memo(({
                   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 )}
               </div>
-              {(input.profileId || input.templateId) && (
+              {input.profileId && (
                 <div className="mt-2 rounded-md bg-background/70 px-2 py-1.5 text-xs text-foreground/90">
                   <span className="font-medium">Profile:</span> {input.profileId}
-                  {" · "}
-                  <span className="font-medium">Template:</span> {input.templateId}
                 </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">

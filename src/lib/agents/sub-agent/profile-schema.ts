@@ -10,30 +10,58 @@ const subAgentVarDefSchema = z.object({
   description: z.string().optional(),
 });
 
-const subAgentTaskTemplateSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  instructionTemplate: z.string().min(1),
-}).strict();
-
 const subAgentProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   enabled: z.boolean(),
-  parentAgentIds: z.array(z.string().min(1)).min(1),
   toolIds: z.array(z.string().min(1)).min(1),
   systemPromptTemplate: z.string().min(1),
-  templates: z.array(subAgentTaskTemplateSchema).min(1),
+  taskDescriptionRequirement: z.string().min(1),
   varSchema: z.record(z.string().regex(variableNameRegex), subAgentVarDefSchema),
   limits: z.object({
-    maxConcurrency: z.number().int().min(1).max(50),
     timeoutMs: z.number().int().min(1000).max(600000),
-    maxInputItems: z.number().int().min(1).max(2000).optional(),
   }),
   version: z.number().int().min(1),
 });
 
 const subAgentProfilesSchema = z.array(subAgentProfileSchema);
+
+function normalizeLegacyProfiles(raw: unknown): unknown {
+  if (!Array.isArray(raw)) {
+    return raw;
+  }
+
+  return raw.map((item) => {
+    if (!item || typeof item !== "object") {
+      return item;
+    }
+
+    const profile = item as Record<string, unknown>;
+    if (typeof profile.taskDescriptionRequirement === "string" && profile.taskDescriptionRequirement.trim().length > 0) {
+      return profile;
+    }
+
+    const templates = profile.templates;
+    if (!Array.isArray(templates) || templates.length === 0) {
+      return profile;
+    }
+
+    const firstTemplate = templates[0];
+    if (!firstTemplate || typeof firstTemplate !== "object") {
+      return profile;
+    }
+
+    const instructionTemplate = (firstTemplate as Record<string, unknown>).instructionTemplate;
+    if (typeof instructionTemplate !== "string" || instructionTemplate.trim().length === 0) {
+      return profile;
+    }
+
+    return {
+      ...profile,
+      taskDescriptionRequirement: instructionTemplate,
+    };
+  });
+}
 
 export class SubAgentConfigError extends Error {
   code: string;
@@ -46,7 +74,8 @@ export class SubAgentConfigError extends Error {
 }
 
 export function parseSubAgentProfiles(raw: unknown): SubAgentProfile[] {
-  const parsed = subAgentProfilesSchema.safeParse(raw);
+  const normalized = normalizeLegacyProfiles(raw);
+  const parsed = subAgentProfilesSchema.safeParse(normalized);
   if (!parsed.success) {
     throw new SubAgentConfigError(
       "SUBAGENT_PROFILE_SCHEMA_INVALID",
@@ -60,30 +89,18 @@ export function parseSubAgentProfiles(raw: unknown): SubAgentProfile[] {
       throw new SubAgentConfigError("SUBAGENT_PROFILE_DUPLICATED", `Duplicated profile id: ${profile.id}`);
     }
     ids.add(profile.id);
-
-    const templateIds = new Set<string>();
-    for (const template of profile.templates) {
-      if (templateIds.has(template.id)) {
-        throw new SubAgentConfigError(
-          "SUBAGENT_TEMPLATE_DUPLICATED",
-          `Duplicated template id in profile "${profile.id}": ${template.id}`
-        );
-      }
-      templateIds.add(template.id);
-    }
   }
 
   return parsed.data;
 }
 
 export function resolveEnabledProfilesForAgent(
-  customParams: Record<string, unknown> | undefined,
-  parentAgentId: string
+  customParams: Record<string, unknown> | undefined
 ): SubAgentProfile[] {
   const rawProfiles = customParams?.subAgentProfiles;
   if (!rawProfiles) {
     return [];
   }
   const profiles = parseSubAgentProfiles(rawProfiles);
-  return profiles.filter(profile => profile.enabled && profile.parentAgentIds.includes(parentAgentId));
+  return profiles.filter(profile => profile.enabled);
 }

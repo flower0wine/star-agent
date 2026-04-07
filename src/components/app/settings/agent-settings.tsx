@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
@@ -38,7 +38,7 @@ import { SettingsSectionShell } from "./settings-section-shell";
 import { AgentSettingsSidebar } from "./agent-settings/agent-settings-sidebar";
 import type { AgentPanelType, AgentSidebarItem } from "./agent-settings/agent-settings-sidebar";
 import { AgentToolCenter } from "./agent-settings/agent-tool-center";
-import { SubAgentProfileCenter } from "./agent-settings/subagent-profile-center";
+import { SubAgentProfileCenter, createNewSubAgentProfile } from "./agent-settings/subagent-profile-center";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -448,6 +448,7 @@ function readSubAgentProfiles(customParams: Record<string, unknown>): {
 export function AgentSettings() {
   const [activeAgentId, setActiveAgentId] = useState<AgentId>("star");
   const [activePanel, setActivePanel] = useState<AgentPanelType>("agents");
+  const [activeSubAgentProfileId, setActiveSubAgentProfileId] = useState<string | undefined>(undefined);
 
   const starConfigState = useAgentConfig<StarAgentStaticConfig>({
     agentId: "star",
@@ -479,14 +480,21 @@ export function AgentSettings() {
   );
   const subAgentProfiles = subAgentProfileResult.profiles;
   const subAgentProfilesParseError = subAgentProfileResult.parseError;
-  const subAgentCounts = useMemo(
-    () =>
-      AGENTS.reduce<Record<string, number>>((acc, agent) => {
-        acc[agent.id] = subAgentProfiles.filter(profile => profile.parentAgentIds.includes(agent.id)).length;
-        return acc;
-      }, {}),
-    [subAgentProfiles]
+  const totalSubAgentProfiles = subAgentProfiles.length;
+  const activeSubAgentProfile = useMemo(
+    () => subAgentProfiles.find(profile => profile.id === activeSubAgentProfileId) || subAgentProfiles[0] || null,
+    [subAgentProfiles, activeSubAgentProfileId]
   );
+
+  useEffect(() => {
+    if (subAgentProfiles.length === 0) {
+      setActiveSubAgentProfileId(undefined);
+      return;
+    }
+    if (!activeSubAgentProfileId || !subAgentProfiles.some(profile => profile.id === activeSubAgentProfileId)) {
+      setActiveSubAgentProfileId(subAgentProfiles[0].id);
+    }
+  }, [subAgentProfiles, activeSubAgentProfileId]);
 
   if (
     starConfigState.isLoading
@@ -509,8 +517,6 @@ export function AgentSettings() {
 
   const { dynamicConfig, staticConfig } = activeState.config;
   const hasToolSelectionConfigured = readToolSelectionConfigured(dynamicConfig.customParams);
-  const activeSubAgentProfiles = subAgentProfiles.filter(profile => profile.parentAgentIds.includes(activeAgentId));
-
   const handleToolChange = async (tools: string[]) => {
     await activeState.updateDynamicConfig({
       enabledTools: tools,
@@ -560,14 +566,54 @@ export function AgentSettings() {
 
   const handleSubAgentProfilesChange = async (profiles: SubAgentProfile[]) => {
     const currentCustomParams = subAgentConfigState.config?.dynamicConfig.customParams || {};
-    const allProfiles = readSubAgentProfiles(currentCustomParams).profiles;
-    const untouchedProfiles = allProfiles.filter(profile => !profile.parentAgentIds.includes(activeAgentId));
     await subAgentConfigState.updateDynamicConfig({
       customParams: {
         ...currentCustomParams,
-        subAgentProfiles: [...untouchedProfiles, ...profiles],
+        subAgentProfiles: profiles,
       },
     });
+  };
+
+  const handleSubAgentProfileSave = async (profile: SubAgentProfile) => {
+    const nextProfiles = subAgentProfiles.map(item => (item.id === profile.id ? profile : item));
+    await handleSubAgentProfilesChange(nextProfiles);
+  };
+
+  const handleCreateSubAgentProfile = async () => {
+    const profile = createNewSubAgentProfile(subAgentProfiles);
+    const nextProfiles = [...subAgentProfiles, profile];
+    await handleSubAgentProfilesChange(nextProfiles);
+    setActiveSubAgentProfileId(profile.id);
+    setActivePanel("subagents");
+  };
+
+  const handleDuplicateSubAgentProfile = async (profileId: string) => {
+    const original = subAgentProfiles.find(profile => profile.id === profileId);
+    if (!original) {
+      return;
+    }
+    const duplicatedIdBase = `${original.id}-copy`;
+    let duplicatedId = duplicatedIdBase;
+    let index = 2;
+    while (subAgentProfiles.some(profile => profile.id === duplicatedId)) {
+      duplicatedId = `${duplicatedIdBase}-${index}`;
+      index += 1;
+    }
+    const duplicated: SubAgentProfile = {
+      ...original,
+      id: duplicatedId,
+      name: `${original.name} Copy`,
+      version: original.version + 1,
+    };
+    const nextProfiles = [...subAgentProfiles, duplicated];
+    await handleSubAgentProfilesChange(nextProfiles);
+    setActiveSubAgentProfileId(duplicated.id);
+  };
+
+  const handleDeleteSubAgentProfile = async (profileId: string) => {
+    const nextProfiles = subAgentProfiles.filter(profile => profile.id !== profileId);
+    await handleSubAgentProfilesChange(nextProfiles);
+    setActiveSubAgentProfileId(nextProfiles[0]?.id);
   };
 
   return (
@@ -582,11 +628,17 @@ export function AgentSettings() {
             items={AGENTS}
             activeAgentId={activeAgentId}
             activePanel={activePanel}
-            subAgentCounts={subAgentCounts}
-            onSelect={(panel, id) => {
-              setActivePanel(panel);
+            subAgentProfiles={subAgentProfiles}
+            activeSubAgentProfileId={activeSubAgentProfile?.id}
+            onSelectAgent={(id) => {
+              setActivePanel("agents");
               setActiveAgentId(id as AgentId);
             }}
+            onSelectSubAgentProfile={(profileId) => {
+              setActivePanel("subagents");
+              setActiveSubAgentProfileId(profileId);
+            }}
+            onCreateSubAgentProfile={() => void handleCreateSubAgentProfile()}
           />
 
           <div className="h-full min-h-0 space-y-5 overflow-y-auto pr-1">
@@ -597,12 +649,14 @@ export function AgentSettings() {
                 </span>
                 <div className="min-w-0">
                   <h4 className="truncate font-medium">
-                    {activePanel === "agents" ? "Agent 配置" : "SubAgent 配置"} · {activeAgent.name}
+                    {activePanel === "agents"
+                      ? `Agent 配置 · ${activeAgent.name}`
+                      : `SubAgent 配置 · ${activeSubAgentProfile?.name || "未选择 Profile"}`}
                   </h4>
                   <p className="truncate text-xs text-muted-foreground">
                     {activePanel === "agents"
                       ? activeAgent.description
-                      : `当前 Agent 下共 ${subAgentCounts[activeAgentId] || 0} 个 SubAgent Profiles`}
+                      : `当前共 ${totalSubAgentProfiles} 个 SubAgent Profiles（所有 Agent 共享）`}
                   </p>
                 </div>
               </div>
@@ -679,15 +733,16 @@ export function AgentSettings() {
                     检测到部分 SubAgent 配置格式无效，已仅展示可解析配置。请保存一次以覆盖旧格式数据。
                   </div>
                 )}
-                {activeSubAgentProfiles.length === 0 && (
+                {subAgentProfiles.length === 0 && (
                   <div className="rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
-                    当前 Agent 下暂无 SubAgent Profile，可点击右侧区域中的“新建 Profile”开始配置。
+                    当前暂无 SubAgent Profile，可点击左侧 SubAgents 区域底部“新建 Profile”开始配置。
                   </div>
                 )}
                 <SubAgentProfileCenter
-                  defaultParentAgentId={activeAgentId}
-                  profiles={activeSubAgentProfiles}
-                  onChange={handleSubAgentProfilesChange}
+                  profile={activeSubAgentProfile}
+                  onChange={handleSubAgentProfileSave}
+                  onDuplicate={handleDuplicateSubAgentProfile}
+                  onDelete={handleDeleteSubAgentProfile}
                 />
               </>
             )}
