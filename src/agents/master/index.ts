@@ -7,9 +7,9 @@
 
 import type { AgentConfig } from "@/lib/agents/registry";
 import type { GitHubRepo } from "@/lib/github/api";
+import { createPromptTemplateVars, renderPromptTemplate } from "@/lib/agents/prompt-template";
+import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
 import { masterAgent } from "./config";
-import { getMasterSystemPrompt } from "./prompt";
-import type { MasterAgentContext } from "./prompt";
 import { createGetAllReposTool, createCreateSubAgentTool } from "./tools";
 import { createDisplayRepositoriesTool } from "../star/tools/display-repositories";
 
@@ -50,11 +50,13 @@ export function createMasterAgent(
     },
 
     getSystemPrompt: () => {
-      const masterContext: MasterAgentContext = {
-        username,
-        reposCount: repos.length,
-      };
-      return getMasterSystemPrompt(masterContext);
+      return renderPromptTemplate(
+        getDefaultSystemPromptTemplate("master"),
+        createPromptTemplateVars({
+          username,
+          reposCount: repos.length,
+        })
+      );
     },
   };
 }

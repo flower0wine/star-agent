@@ -8,9 +8,9 @@
 import type { AgentConfig } from "@/lib/agents/registry";
 import type { GitHubRepo } from "@/lib/github/api";
 import { formatReposForInitialContext } from "@/lib/github/utils";
+import { createPromptTemplateVars, renderPromptTemplate } from "@/lib/agents/prompt-template";
+import { getDefaultSystemPromptTemplate } from "@/lib/agents/default-system-prompt-template";
 import { starAgent } from "./config";
-import { getStarSystemPrompt } from "./prompt";
-import type { StarAgentContext } from "./prompt";
 import { createStarTools } from "./tools";
 
 /**
@@ -32,12 +32,17 @@ export function createStarAgent(repos: GitHubRepo[]): AgentConfig {
     getTools: () => tools,
 
     getSystemPrompt: (context: Record<string, unknown>) => {
-      // Extract context for prompt
-      const starContext: StarAgentContext = {
-        username: context.username as string,
-        repos,
-      };
-      return getStarSystemPrompt(starContext);
+      const username = typeof context.username === "string" ? context.username : "";
+      return renderPromptTemplate(
+        getDefaultSystemPromptTemplate("star"),
+        createPromptTemplateVars({
+          username,
+          reposCount: repos.length,
+          extras: {
+            repos_context: formatReposForInitialContext(repos),
+          },
+        })
+      );
     },
   };
 }
