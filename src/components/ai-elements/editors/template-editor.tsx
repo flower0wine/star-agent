@@ -10,23 +10,55 @@ import { cn } from "@/lib/utils";
 interface TemplateEditorProps {
   value: string;
   onChange: (value: string) => void;
-  variables?: string[];
+  variables?: Array<string | TemplateVariableOption>;
   rows?: number;
   placeholder?: string;
   showVariableHint?: boolean;
+}
+
+export interface TemplateVariableOption {
+  name: string;
+  type?: string;
+  description?: string;
+}
+
+interface NormalizedTemplateVariableOption {
+  name: string;
+  type?: string;
+  description?: string;
+}
+
+interface TemplateCompletion extends Completion {
+  variableType?: string;
+  variableDescription?: string;
 }
 
 function toPlaceholder(variable: string): string {
   return `{{${variable}}}`;
 }
 
-function createCompletionOption(variable: string): Completion {
+function normalizeVariableOption(
+  variable: string | TemplateVariableOption
+): NormalizedTemplateVariableOption {
+  if (typeof variable === "string") {
+    return { name: variable };
+  }
   return {
-    label: variable,
-    detail: toPlaceholder(variable),
+    name: variable.name,
+    type: variable.type,
+    description: variable.description,
+  };
+}
+
+function createCompletionOption(variable: NormalizedTemplateVariableOption): TemplateCompletion {
+  return {
+    label: variable.name,
+    detail: toPlaceholder(variable.name),
     type: "variable",
+    variableType: variable.type,
+    variableDescription: variable.description,
     apply: (view, _completion, from, to) => {
-      const token = toPlaceholder(variable);
+      const token = variable.name;
       view.dispatch({
         changes: { from, to, insert: token },
         selection: { anchor: from + token.length },
@@ -94,8 +126,28 @@ export function TemplateEditor({
   showVariableHint = true,
 }: TemplateEditorProps) {
   const { resolvedTheme } = useTheme();
-  const sortedVars = useMemo(() => [...new Set(variables)].sort(), [variables]);
-  const completionOptions = useMemo(() => sortedVars.map(createCompletionOption), [sortedVars]);
+  const normalizedVars = useMemo(() => {
+    const byName = new Map<string, NormalizedTemplateVariableOption>();
+    for (const option of variables) {
+      const normalized = normalizeVariableOption(option);
+      if (!normalized.name) {
+        continue;
+      }
+      const existing = byName.get(normalized.name);
+      if (!existing) {
+        byName.set(normalized.name, normalized);
+        continue;
+      }
+      byName.set(normalized.name, {
+        ...existing,
+        type: existing.type || normalized.type,
+        description: existing.description || normalized.description,
+      });
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [variables]);
+  const sortedVarNames = useMemo(() => normalizedVars.map(item => item.name), [normalizedVars]);
+  const completionOptions = useMemo(() => normalizedVars.map(createCompletionOption), [normalizedVars]);
   const editorExtensions = useMemo(
     () => [
       EditorView.lineWrapping,
@@ -105,6 +157,43 @@ export function TemplateEditor({
         closeOnBlur: true,
         icons: false,
         override: [createTemplateCompletionSource(completionOptions)],
+        addToOptions: [
+          {
+            position: 20,
+            render: (completion) => {
+              const typedCompletion = completion as TemplateCompletion;
+              const root = document.createElement("div");
+              root.className = "cm-template-completion flex min-w-0 flex-col gap-1 py-1";
+
+              const topRow = document.createElement("div");
+              topRow.className = "flex items-center justify-between gap-2";
+
+              const nameEl = document.createElement("span");
+              nameEl.className = "truncate font-mono text-xs";
+              nameEl.textContent = typedCompletion.label;
+
+              topRow.appendChild(nameEl);
+
+              if (typedCompletion.variableType) {
+                const typeEl = document.createElement("span");
+                typeEl.className = "shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground";
+                typeEl.textContent = typedCompletion.variableType;
+                topRow.appendChild(typeEl);
+              }
+
+              root.appendChild(topRow);
+
+              if (typedCompletion.variableDescription) {
+                const descEl = document.createElement("div");
+                descEl.className = "line-clamp-2 text-[11px] leading-snug text-muted-foreground/80";
+                descEl.textContent = typedCompletion.variableDescription;
+                root.appendChild(descEl);
+              }
+
+              return root;
+            },
+          },
+        ],
       }),
       EditorView.theme({
         "&": {
@@ -150,6 +239,7 @@ export function TemplateEditor({
         ".cm-tooltip.cm-tooltip-autocomplete > ul": {
           padding: "0",
           margin: "0",
+          maxHeight: "calc(10em + 100px)",
         },
         ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
           borderRadius: "0.375rem",
@@ -157,6 +247,12 @@ export function TemplateEditor({
         ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
           backgroundColor: "var(--accent)!important",
           color: "var(--accent-foreground)",
+        },
+        ".cm-tooltip.cm-tooltip-autocomplete .cm-completionLabel": {
+          display: "none",
+        },
+        ".cm-tooltip.cm-tooltip-autocomplete .cm-completionDetail": {
+          display: "none",
         },
         ".cm-template-variable": {
           color: "var(--primary)",
@@ -173,7 +269,7 @@ export function TemplateEditor({
 
   return (
     <div className="space-y-2">
-      {showVariableHint && sortedVars.length > 0 && (
+      {showVariableHint && sortedVarNames.length > 0 && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <BracesIcon className="size-3.5" />
           输入 <span className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{`{{`}</span> 触发变量建议
@@ -196,4 +292,8 @@ export function TemplateEditor({
     </div>
   );
 }
+
+
+
+
 

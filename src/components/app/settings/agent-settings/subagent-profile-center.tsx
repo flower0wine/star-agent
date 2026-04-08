@@ -6,6 +6,7 @@ import type {
   TemplateVariableType,
 } from "@/lib/agents/sub-agent/types";
 import { PREDEFINED_RUNTIME_VARIABLES } from "@/lib/agents/sub-agent/runtime-variables";
+import type { TemplateVariableOption } from "@/components/ai-elements/editors/template-editor";
 import { getSubAgentCompatibleTools } from "@/lib/agents/tool-registry";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,10 +82,7 @@ export function SubAgentProfileCenter({
   onDelete,
 }: SubAgentProfileCenterProps) {
   const tools = useMemo(() => getSubAgentCompatibleTools(), []);
-  const builtInVariables = useMemo(
-    () => PREDEFINED_RUNTIME_VARIABLES.map(item => item.name),
-    []
-  );
+  const builtInVariables = useMemo(() => PREDEFINED_RUNTIME_VARIABLES, []);
   const [draftProfile, setDraftProfile] = useState<SubAgentProfile | null>(profile);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -133,7 +131,22 @@ export function SubAgentProfileCenter({
     );
   }
 
-  const variableOptions = [...new Set([...Object.keys(draftProfile.varSchema), ...builtInVariables])];
+  const variableOptions = useMemo<TemplateVariableOption[]>(() => {
+    const builtInVariableMap = new Map(builtInVariables.map(item => [item.name, item]));
+    const names = new Set<string>([
+      ...Object.keys(draftProfile.varSchema),
+      ...builtInVariables.map(item => item.name),
+    ]);
+    return [...names].map((name) => {
+      const builtInMeta = builtInVariableMap.get(name);
+      const profileMeta = draftProfile.varSchema[name];
+      return {
+        name,
+        type: profileMeta?.type || builtInMeta?.type,
+        description: profileMeta?.description || builtInMeta?.description,
+      };
+    });
+  }, [builtInVariables, draftProfile.varSchema]);
 
   const updateVarSchema = (
     varName: string,
@@ -291,7 +304,7 @@ export function SubAgentProfileCenter({
             <p className="text-xs text-muted-foreground">
               变量白名单由此处变量名决定；勾选 required 后会在执行前强制校验必填。预定义运行时变量：
               {" "}
-              {PREDEFINED_RUNTIME_VARIABLES.map(item => item.name).join(", ")}
+              {PREDEFINED_RUNTIME_VARIABLES.map(item => `${item.name} (${item.type})`).join(", ")}
             </p>
             <div className="hidden grid-cols-[1fr_140px_120px] gap-2 px-1 text-xs text-muted-foreground sm:grid">
               <span>变量名</span>
@@ -359,6 +372,18 @@ export function SubAgentProfileCenter({
                       required
                     </label>
                   </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs text-muted-foreground sm:hidden">描述</Label>
+                    <Input
+                      value={varDef.description || ""}
+                      placeholder="变量描述（会显示在模板编辑器建议中）"
+                      onChange={(event) =>
+                        updateVarSchema(varName, current => ({
+                          ...current,
+                          description: event.target.value.trim() || undefined,
+                        }))}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -415,3 +440,4 @@ export function SubAgentProfileCenter({
     </Card>
   );
 }
+

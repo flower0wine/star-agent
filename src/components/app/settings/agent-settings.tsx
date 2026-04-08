@@ -44,6 +44,7 @@ import { SubAgentProfileCenter, createNewSubAgentProfile } from "./agent-setting
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TemplateEditor } from "@/components/ai-elements/editors/template-editor";
+import type { TemplateVariableOption } from "@/components/ai-elements/editors/template-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -80,6 +81,21 @@ const AGENTS: AgentSidebarItem[] = [
     description: "专利检索与趋势分析",
     icon: <FileSearchIcon className="size-4" />,
   },
+];
+
+const CORE_AGENT_PROMPT_VARIABLES: TemplateVariableOption[] = [
+  { name: "current_date", type: "string", description: "当前日期（YYYY-MM-DD）" },
+  { name: "username", type: "string", description: "当前用户的 GitHub 用户名" },
+  { name: "repos_count", type: "number", description: "当前可访问仓库数量" },
+  { name: "repos_context", type: "string", description: "仓库列表的结构化上下文文本" },
+];
+
+const PATENT_AGENT_PROMPT_VARIABLES: TemplateVariableOption[] = [
+  { name: "current_date", type: "string", description: "当前日期（YYYY-MM-DD）" },
+  { name: "provider", type: "string", description: "当前启用的专利数据源" },
+  { name: "default_lookback_months", type: "number", description: "默认回溯月份" },
+  { name: "max_results_per_request", type: "number", description: "单次请求最大返回条数" },
+  { name: "default_sort_by", type: "string", description: "默认排序字段" },
 ];
 
 interface RepositorySyncCardProps {
@@ -190,7 +206,7 @@ interface PromptCardProps {
   agentId: AgentId;
   systemPromptTemplate: string;
   defaultSystemPromptTemplate: string;
-  variables: string[];
+  variables: TemplateVariableOption[];
   onSystemPromptTemplateSave: (value: string) => Promise<void> | void;
 }
 
@@ -204,7 +220,8 @@ function PromptCard({
   onSystemPromptTemplateSave,
 }: PromptCardProps) {
   const effectiveTemplate = systemPromptTemplate || defaultSystemPromptTemplate;
-  const variableTokens = variables.map(name => `{{${name}}}`).join("、");
+  const variableNames = variables.map(item => item.name);
+  const variableTokens = variableNames.map(name => `{{${name}}}`).join("、");
   const [draftTemplate, setDraftTemplate] = useState(effectiveTemplate);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -214,7 +231,7 @@ function PromptCard({
     setIsDirty(false);
   }, [effectiveTemplate]);
 
-  const unknownVars = findUnknownPromptVariables(draftTemplate, variables);
+  const unknownVars = findUnknownPromptVariables(draftTemplate, variableNames);
 
   const handleSave = async () => {
     if (!isDirty || unknownVars.length > 0 || isSaving) {
@@ -817,7 +834,7 @@ export function AgentSettings() {
                       agentId="patent"
                       systemPromptTemplate={dynamicConfig.systemPromptTemplate || ""}
                       defaultSystemPromptTemplate={getDefaultSystemPromptTemplate("patent")}
-                      variables={["current_date", "provider", "default_lookback_months", "max_results_per_request", "default_sort_by"]}
+                      variables={PATENT_AGENT_PROMPT_VARIABLES}
                       onSystemPromptTemplateSave={async (value) =>
                         await activeState.updateDynamicConfig({ systemPromptTemplate: value })}
                     />
@@ -852,7 +869,7 @@ export function AgentSettings() {
                       agentId={activeAgentId}
                       systemPromptTemplate={dynamicConfig.systemPromptTemplate || ""}
                       defaultSystemPromptTemplate={getDefaultSystemPromptTemplate(activeAgentId)}
-                      variables={["current_date", "username", "repos_count", "repos_context"]}
+                      variables={CORE_AGENT_PROMPT_VARIABLES}
                       onSystemPromptTemplateSave={async (value) =>
                         await activeState.updateDynamicConfig({ systemPromptTemplate: value })}
                     />
@@ -895,6 +912,4 @@ export function AgentSettings() {
     </SettingsSectionShell>
   );
 }
-
-
 

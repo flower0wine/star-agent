@@ -161,7 +161,8 @@ function createFieldSchema(parameter: CreateSubAgentDynamicParameter): z.ZodType
   }
 
   if (parameter.constraints?.enum && parameter.constraints.enum.length > 0) {
-    field = field.refine(value => parameter.constraints!.enum!.includes(value), {
+    const enumValues = parameter.constraints.enum;
+    field = field.refine(value => enumValues.includes(value as string | number | boolean), {
       message: `must be one of: ${parameter.constraints.enum.join(", ")}`,
     });
   }

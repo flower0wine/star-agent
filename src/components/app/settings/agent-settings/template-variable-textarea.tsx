@@ -1,9 +1,10 @@
 import { TemplateEditor } from "@/components/ai-elements/editors/template-editor";
+import type { TemplateVariableOption } from "@/components/ai-elements/editors/template-editor";
 
 interface TemplateVariableTextareaProps {
   value: string;
   onChange: (value: string) => void;
-  variables: string[];
+  variables: Array<string | TemplateVariableOption>;
   rows?: number;
   placeholder?: string;
 }
@@ -26,4 +27,3 @@ export function TemplateVariableTextarea({
     />
   );
 }
-
