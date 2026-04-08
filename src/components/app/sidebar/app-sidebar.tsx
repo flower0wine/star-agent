@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { PlusIcon, SettingsIcon, StarIcon } from "lucide-react";
 
 import { useChatHistoryStore } from "@/stores/chat-history-store";
-import { useStarStore } from "@/stores/star-store";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -22,16 +21,13 @@ import {
 import { ThemeToggle } from "../theme-toggle";
 import { ConversationList } from "./conversation-list";
 import { RenameDialog } from "./rename-dialog";
-import { SettingsDialog } from "../settings/settings-dialog";
 
 export function AppSidebar() {
   const router = useRouter();
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const { createNewConversation, selectConversation, renameConversation } = useChatHistoryStore();
-  const { username } = useStarStore();
+  const { selectConversation, renameConversation } = useChatHistoryStore();
 
   const handleNewConversation = async () => {
     // 清除当前选择，导航到新对话页面
@@ -101,9 +97,11 @@ export function AppSidebar() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem className="flex items-center justify-between">
-              <SidebarMenuButton onClick={() => setSettingsOpen(true)}>
-                <SettingsIcon className="size-4" />
-                <span>设置</span>
+              <SidebarMenuButton asChild>
+                <Link href="/settings">
+                  <SettingsIcon className="size-4" />
+                  <span>设置</span>
+                </Link>
               </SidebarMenuButton>
               <ThemeToggle />
             </SidebarMenuItem>
@@ -119,12 +117,6 @@ export function AppSidebar() {
         onOpenChange={setRenameDialogOpen}
         initialTitle={renameTarget?.title || ""}
         onConfirm={handleRenameConfirm}
-      />
-
-      {/* Settings Dialog */}
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
       />
     </>
   );

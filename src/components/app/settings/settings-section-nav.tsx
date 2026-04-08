@@ -1,6 +1,8 @@
 import { motion } from "motion/react";
+import { ArrowLeftIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 import type { SettingsSection, SettingsSectionItem } from "./settings-types";
 
@@ -8,12 +10,30 @@ interface SettingsSectionNavProps {
   sections: SettingsSectionItem[];
   activeSection: SettingsSection;
   onChange: (section: SettingsSection) => void;
+  onBack: () => void;
 }
 
-export function SettingsSectionNav({ sections, activeSection, onChange }: SettingsSectionNavProps) {
+export function SettingsSectionNav({
+  sections,
+  activeSection,
+  onChange,
+  onBack,
+}: SettingsSectionNavProps) {
   return (
     <aside className="w-56 border-r bg-muted/20 p-3">
-      <div className="mb-2 px-2 py-1 text-xs font-medium tracking-wide text-muted-foreground">设置面板</div>
+      <div className="mb-2 space-y-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="lg"
+          className="w-full justify-start gap-2 rounded-lg"
+          onClick={onBack}
+        >
+          <ArrowLeftIcon className="size-4" />
+          返回对话页
+        </Button>
+        <div className="px-2 py-1 text-xs font-medium tracking-wide text-muted-foreground">设置面板</div>
+      </div>
       <div className="space-y-1">
         {sections.map((section) => {
           const isActive = activeSection === section.id;

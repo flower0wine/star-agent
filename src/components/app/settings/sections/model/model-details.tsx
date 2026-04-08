@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { Code2Icon, CoinsIcon, DatabaseIcon, KeyRoundIcon, LayersIcon } from "lucide-react";
 
 import type { CatalogProviderModel, CatalogProviderSummary } from "@/lib/models/catalog";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -11,12 +13,32 @@ interface ModelDetailsProps {
   model: CatalogProviderModel | undefined;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  focusItem?: "catalog" | "api-key" | "details";
 }
 
-export function ModelDetails({ provider, model, apiKey, onApiKeyChange }: ModelDetailsProps) {
+export function ModelDetails({ provider, model, apiKey, onApiKeyChange, focusItem }: ModelDetailsProps) {
+  const apiKeyRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (focusItem === "api-key") {
+      apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (focusItem === "details") {
+      detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [focusItem]);
+
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-card p-4">
+      <div
+        ref={apiKeyRef}
+        className={cn(
+          "rounded-xl border bg-card p-4",
+          focusItem === "api-key" && "border-primary/50 bg-accent/30"
+        )}
+      >
         <div className="mb-3 flex items-center gap-3">
           <img
             src={`https://models.dev/logos/${provider.id}.svg`}
@@ -50,7 +72,13 @@ export function ModelDetails({ provider, model, apiKey, onApiKeyChange }: ModelD
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card p-4">
+      <div
+        ref={detailsRef}
+        className={cn(
+          "rounded-xl border bg-card p-4",
+          focusItem === "details" && "border-primary/50 bg-accent/30"
+        )}
+      >
         {!model
           ? (
               <div className="text-sm text-muted-foreground">请选择一个模型查看详细信息。</div>

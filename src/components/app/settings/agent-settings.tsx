@@ -578,10 +578,20 @@ function readSubAgentProfiles(customParams: Record<string, unknown>): {
   }
 }
 
-export function AgentSettings() {
-  const [activeAgentId, setActiveAgentId] = useState<AgentId>("star");
-  const [activePanel, setActivePanel] = useState<AgentPanelType>("agents");
-  const [activeSubAgentProfileId, setActiveSubAgentProfileId] = useState<string | undefined>(undefined);
+interface AgentSettingsProps {
+  initialPanel?: AgentPanelType;
+  initialAgentId?: AgentId;
+  initialSubAgentProfileId?: string;
+}
+
+export function AgentSettings({
+  initialPanel = "agents",
+  initialAgentId = "star",
+  initialSubAgentProfileId,
+}: AgentSettingsProps) {
+  const [activeAgentId, setActiveAgentId] = useState<AgentId>(initialAgentId);
+  const [activePanel, setActivePanel] = useState<AgentPanelType>(initialPanel);
+  const [activeSubAgentProfileId, setActiveSubAgentProfileId] = useState<string | undefined>(initialSubAgentProfileId);
 
   const starConfigState = useAgentConfig<StarAgentStaticConfig>({
     agentId: "star",
@@ -618,6 +628,18 @@ export function AgentSettings() {
     () => subAgentProfiles.find(profile => profile.id === activeSubAgentProfileId) || subAgentProfiles[0] || null,
     [subAgentProfiles, activeSubAgentProfileId]
   );
+
+  useEffect(() => {
+    setActivePanel(initialPanel);
+  }, [initialPanel]);
+
+  useEffect(() => {
+    setActiveAgentId(initialAgentId);
+  }, [initialAgentId]);
+
+  useEffect(() => {
+    setActiveSubAgentProfileId(initialSubAgentProfileId);
+  }, [initialSubAgentProfileId]);
 
   useEffect(() => {
     if (subAgentProfiles.length === 0) {

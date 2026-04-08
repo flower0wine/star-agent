@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { AlertCircleIcon, Loader2Icon } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -11,7 +11,19 @@ import { SettingsSectionShell } from "../settings-section-shell";
 import { ModelDetails } from "./model/model-details";
 import { ModelTree } from "./model/model-tree";
 
-export function ModelSettingsSection() {
+export type ModelSettingsFocusItem = "catalog" | "api-key" | "details";
+
+interface ModelSettingsSectionProps {
+  focusItem?: ModelSettingsFocusItem;
+  initialProviderId?: string;
+  initialModelId?: string;
+}
+
+export function ModelSettingsSection({
+  focusItem,
+  initialProviderId,
+  initialModelId,
+}: ModelSettingsSectionProps) {
   const {
     defaultProviderId,
     defaultModelId,
@@ -32,6 +44,8 @@ export function ModelSettingsSection() {
     error,
   } = useModelTreeCatalog();
 
+  const treeRef = useRef<HTMLDivElement>(null);
+
   const activeProvider = useMemo(() => {
     if (providers.length === 0) {
       return undefined;
@@ -51,6 +65,48 @@ export function ModelSettingsSection() {
   }, [activeProvider, defaultModelId]);
 
   const activeApiKey = activeProvider ? providerApiKeys[activeProvider.id] || "" : "";
+
+  useEffect(() => {
+    if (!providers.length || (!initialProviderId && !initialModelId)) {
+      return;
+    }
+
+    const targetProvider = initialProviderId
+      ? providers.find(provider => provider.id === initialProviderId)
+      : providers.find(provider => provider.models.some(model => model.id === initialModelId));
+
+    if (!targetProvider || targetProvider.models.length === 0) {
+      return;
+    }
+
+    const targetModel = initialModelId
+      ? targetProvider.models.find(model => model.id === initialModelId) || targetProvider.models[0]
+      : targetProvider.models[0];
+
+    if (!targetModel) {
+      return;
+    }
+
+    if (targetProvider.id === defaultProviderId && targetModel.id === defaultModelId) {
+      return;
+    }
+
+    setDefaultModelSelection(targetProvider.id, targetModel.id);
+  }, [
+    defaultModelId,
+    defaultProviderId,
+    initialModelId,
+    initialProviderId,
+    providers,
+    setDefaultModelSelection,
+  ]);
+
+  useEffect(() => {
+    if (focusItem !== "catalog") {
+      return;
+    }
+    treeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focusItem]);
 
   return (
     <SettingsSectionShell
@@ -75,12 +131,14 @@ export function ModelSettingsSection() {
         )}
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(320px,0.95fr)_minmax(420px,1.05fr)]">
-          <ModelTree
-            providers={providers}
-            selectedProviderId={defaultProviderId}
-            selectedModelId={defaultModelId}
-            onSelectModel={setDefaultModelSelection}
-          />
+          <div ref={treeRef}>
+            <ModelTree
+              providers={providers}
+              selectedProviderId={defaultProviderId}
+              selectedModelId={defaultModelId}
+              onSelectModel={setDefaultModelSelection}
+            />
+          </div>
 
           <ScrollArea className="h-full min-h-0 rounded-xl border bg-card">
             <div className="p-4">
@@ -90,6 +148,7 @@ export function ModelSettingsSection() {
                   model={activeModel}
                   apiKey={activeApiKey}
                   onApiKeyChange={(value) => setProviderApiKey(activeProvider.id, value)}
+                  focusItem={focusItem}
                 />
               )}
             </div>
