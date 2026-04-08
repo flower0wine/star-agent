@@ -13,7 +13,7 @@ import {
   createUIMessageStreamResponse,
 } from "ai";
 import type { ModelMessage, streamText as StreamTextType } from "ai";
-
+import dayjs from "dayjs";
 import type { SubAgentProgress } from "./sub-agent/types";
 import { getSubAgentManager } from "./sub-agent/manager";
 import {
@@ -31,6 +31,7 @@ interface MasterStreamConfig {
   tools: Parameters<typeof StreamTextType>[0]["tools"];
   system: Parameters<typeof StreamTextType>[0]["system"];
   initialModelMessages: ModelMessage[];
+  providerOptions?: Parameters<typeof StreamTextType>[0]["providerOptions"];
 }
 
 const MAX_ORCHESTRATION_CYCLES = 10;
@@ -44,7 +45,7 @@ const MAX_ORCHESTRATION_CYCLES = 10;
 export async function createMultiStreamResponse(
   masterStream: ReturnType<typeof StreamTextType>,
   requestId: string,
-  masterConfig?: MasterStreamConfig
+  masterConfig?: MasterStreamConfig,
 ): Promise<Response> {
   const subManager = getSubAgentManager();
 
@@ -135,14 +136,14 @@ export async function createMultiStreamResponse(
         // Execution cycle loop (bounded)
         for (let cycleAttempt = 0; cycleAttempt < MAX_ORCHESTRATION_CYCLES; cycleAttempt++) {
           const cycleNumber = orchestrator.getCycleNumber();
-          const cycleStartedAt = new Date().toISOString();
+          const cycleStartedAt = dayjs().toISOString();
           console.log(
-            `[MultiStream/${requestId}] ===== Cycle ${cycleNumber} Start =====`
+            `[MultiStream/${requestId}] ===== Cycle ${cycleNumber} Start =====`,
           );
 
           // Phase 1: Stream master agent output until completion
           console.log(
-            `[MultiStream/${requestId}] Phase 1: Streaming master output`
+            `[MultiStream/${requestId}] Phase 1: Streaming master output`,
           );
 
           // Stream and collect master output
@@ -152,7 +153,7 @@ export async function createMultiStreamResponse(
                 return undefined;
               }
 
-              const cycleFinishedAt = new Date().toISOString();
+              const cycleFinishedAt = dayjs().toISOString();
               const metadata = buildChatMessageMetadata({
                 totalUsage: part.totalUsage,
                 startedAt: cycleStartedAt,
@@ -175,18 +176,18 @@ export async function createMultiStreamResponse(
 
           orchestrator.notifyMasterComplete();
           console.log(
-            `[MultiStream/${requestId}] Master stream completed (Cycle ${cycleNumber})`
+            `[MultiStream/${requestId}] Master stream completed (Cycle ${cycleNumber})`,
           );
 
           // Phase 2: Wait for all sub-agents to complete
           console.log(
-            `[MultiStream/${requestId}] Phase 2: Waiting for sub-agents`
+            `[MultiStream/${requestId}] Phase 2: Waiting for sub-agents`,
           );
 
           const subAgentResults = await orchestrator.waitForSubAgents();
 
           console.log(
-            `[MultiStream/${requestId}] Sub-agents completed: ${subAgentResults.length} results`
+            `[MultiStream/${requestId}] Sub-agents completed: ${subAgentResults.length} results`,
           );
 
           orchestrator.completeCycle();
@@ -194,14 +195,14 @@ export async function createMultiStreamResponse(
           // Phase 3: Check if we need another cycle
           if (subAgentResults.length === 0) {
             console.log(
-              `[MultiStream/${requestId}] No sub-agents created, ending cycles`
+              `[MultiStream/${requestId}] No sub-agents created, ending cycles`,
             );
             break;
           }
 
           if (!orchestrator.shouldStartNewCycle(subAgentResults)) {
             console.log(
-              `[MultiStream/${requestId}] No new cycle needed, ending`
+              `[MultiStream/${requestId}] No new cycle needed, ending`,
             );
             break;
           }
@@ -209,7 +210,7 @@ export async function createMultiStreamResponse(
           // Check if master config is available for resumption
           if (!masterConfig) {
             console.log(
-              `[MultiStream/${requestId}] Master config not available, cannot resume. Ending cycles.`
+              `[MultiStream/${requestId}] Master config not available, cannot resume. Ending cycles.`,
             );
 
             // Send results as data event for frontend display
@@ -228,7 +229,7 @@ export async function createMultiStreamResponse(
 
           // Phase 4: Resume master with sub-agent results
           console.log(
-            `[MultiStream/${requestId}] Phase 3: Resuming master with results`
+            `[MultiStream/${requestId}] Phase 3: Resuming master with results`,
           );
 
           orchestrator.startNewCycle();
@@ -247,16 +248,17 @@ export async function createMultiStreamResponse(
             subAgentResults,
             cycleNumber,
             requestId,
+            providerOptions: masterConfig.providerOptions,
           });
 
           console.log(
-            `[MultiStream/${requestId}] Master resumed for cycle ${orchestrator.getCycleNumber()}`
+            `[MultiStream/${requestId}] Master resumed for cycle ${orchestrator.getCycleNumber()}`,
           );
         }
 
         orchestrator.complete();
         console.log(
-          `[MultiStream/${requestId}] ===== All cycles completed =====`
+          `[MultiStream/${requestId}] ===== All cycles completed =====`,
         );
       } finally {
         unsubscribe();

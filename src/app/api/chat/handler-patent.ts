@@ -3,19 +3,19 @@
  */
 
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
-
+import dayjs from "dayjs";
 import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
-
-import { getModel } from "./model";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
+import { buildTelemetrySettings } from "@/lib/observability/telemetry";
+import { getModel } from "./model";
 import type { AgentConfigPayload, ChatRequestBody } from "./types";
 
 export async function handlePatentAgent(
   requestId: string,
   body: ChatRequestBody,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
 ): Promise<Response> {
-  const generationStartedAt = new Date().toISOString();
+  const generationStartedAt = dayjs().toISOString();
   const agentConfig: AgentConfigPayload = body.agentConfig || {};
   const { tools, systemPrompt } = resolveAgentRuntime({
     agentId: "patent",
@@ -37,6 +37,11 @@ export async function handlePatentAgent(
     messages: modelMessages,
     stopWhen: stepCountIs(100),
     abortSignal,
+    experimental_telemetry: buildTelemetrySettings({
+      functionId: "chat.patent.stream",
+      requestId,
+      agentId: "patent",
+    }),
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`[${requestId}] Patent tool started: ${toolCall.toolName}`, {
         toolCallId: toolCall.toolCallId,
@@ -66,7 +71,7 @@ export async function handlePatentAgent(
   return result.toUIMessageStreamResponse({
     messageMetadata: ({ part }) => {
       if (part.type === "finish") {
-        const generationFinishedAt = new Date().toISOString();
+        const generationFinishedAt = dayjs().toISOString();
         return buildChatMessageMetadata({
           totalUsage: part.totalUsage,
           startedAt: generationStartedAt,
@@ -76,4 +81,3 @@ export async function handlePatentAgent(
     },
   });
 }
-

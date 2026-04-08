@@ -10,6 +10,7 @@ import { convertToModelMessages, streamText, stepCountIs } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
+import { buildTelemetrySettings } from "@/lib/observability/telemetry";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
@@ -23,7 +24,7 @@ import { createMultiStreamResponse } from "@/lib/agents/multi-stream";
  */
 export async function handleMasterAgent(
   requestId: string,
-  body: ChatRequestBody
+  body: ChatRequestBody,
 ): Promise<Response> {
   // Support both legacy top-level fields and new context-based fields
   const username = body.username || body.context?.username;
@@ -32,7 +33,7 @@ export async function handleMasterAgent(
   if (!username) {
     return NextResponse.json(
       { error: "GitHub username is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -48,7 +49,7 @@ export async function handleMasterAgent(
   if (finalRepos.length === 0) {
     return NextResponse.json(
       { error: "No starred repositories found for this user" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -79,6 +80,15 @@ export async function handleMasterAgent(
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
+    experimental_telemetry: buildTelemetrySettings({
+      functionId: "chat.master.stream",
+      requestId,
+      agentId: "master",
+      metadata: {
+        username,
+        reposCount: finalRepos.length,
+      },
+    }),
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`[${requestId}] Master tool started: ${toolCall.toolName}`, {
         toolCallId: toolCall.toolCallId,
@@ -113,6 +123,7 @@ export async function handleMasterAgent(
     tools,
     system: systemPrompt,
     initialModelMessages: modelMessages,
+    providerOptions: streamOptions.providerOptions,
   };
 
   // Return multi-stream response (merges master + sub-agent streams)
@@ -124,4 +135,3 @@ export async function handleMasterAgent(
 
   return response;
 }
-

@@ -5,8 +5,10 @@
  */
 
 import { ToolLoopAgent, createAgentUIStream } from "ai";
+import dayjs from "dayjs";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 import type { GitHubRepo } from "@/lib/github/api";
+import { buildTelemetrySettings } from "@/lib/observability/telemetry";
 import type { SubAgentTask, SubAgentProgress } from "./types";
 import { createSubAgentTools } from "./tool-factory";
 import { renderTemplate } from "./template-renderer";
@@ -51,7 +53,7 @@ function buildSubAgentSystemPrompt(task: SubAgentTask): string {
 export async function executeSubAgentTask(
   task: SubAgentTask,
   onProgress: (progress: SubAgentProgress) => void,
-  abortSignal: AbortSignal
+  abortSignal: AbortSignal,
 ): Promise<void> {
   console.log(`[Executor/${task.id}] Starting sub-agent task...`);
   console.log(`[Executor/${task.id}] Task: ${task.task}`);
@@ -78,6 +80,17 @@ export async function executeSubAgentTask(
     model: modelInstance.model,
     instructions: systemPrompt,
     tools: subAgentTools,
+    experimental_telemetry: buildTelemetrySettings({
+      functionId: "chat.subagent.run",
+      requestId: task.parentId,
+      agentId: task.parentAgentId,
+      metadata: {
+        taskId: task.id,
+        profileId: task.profileId,
+        profileVersion: task.profileVersion,
+        originTool: task.originTool,
+      },
+    }),
   });
   console.log(`[Executor/${task.id}] ToolLoopAgent created`);
 
@@ -103,7 +116,7 @@ export async function executeSubAgentTask(
     console.log(`[Executor/${task.id}] UI messages (parts format):`, JSON.stringify(uiMessages));
 
     // Use createAgentUIStream for streaming execution
-    const generationStartedAt = new Date().toISOString();
+    const generationStartedAt = dayjs().toISOString();
     const stream = await createAgentUIStream({
       agent: subAgent,
       uiMessages,
@@ -114,7 +127,7 @@ export async function executeSubAgentTask(
           return undefined;
         }
 
-        const generationFinishedAt = new Date().toISOString();
+        const generationFinishedAt = dayjs().toISOString();
         return buildChatMessageMetadata({
           totalUsage: part.totalUsage,
           startedAt: generationStartedAt,
@@ -218,4 +231,3 @@ export async function executeSubAgentTask(
     throw error;
   }
 }
-

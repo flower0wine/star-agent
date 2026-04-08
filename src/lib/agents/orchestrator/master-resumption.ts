@@ -6,6 +6,7 @@
 
 import { streamText } from "ai";
 import type { ModelMessage } from "ai";
+import { buildTelemetrySettings } from "@/lib/observability/telemetry";
 import type { SubAgentResult } from "./types";
 
 /**
@@ -15,7 +16,7 @@ import type { SubAgentResult } from "./types";
  */
 export function createResumptionMessage(
   results: SubAgentResult[],
-  cycleNumber: number
+  cycleNumber: number,
 ): ModelMessage {
   const content = formatResultsAsMessage(results, cycleNumber);
 
@@ -30,7 +31,7 @@ export function createResumptionMessage(
  */
 function formatResultsAsMessage(
   results: SubAgentResult[],
-  cycleNumber: number
+  cycleNumber: number,
 ): string {
   if (results.length === 0) {
     return `[子 Agent 结果] 第 ${cycleNumber} 轮：所有子 Agent 已完成，但没有返回结果。`;
@@ -98,6 +99,15 @@ export async function resumeMasterAgent(
     system,
     messages: updatedMessages,
     providerOptions,
+    experimental_telemetry: buildTelemetrySettings({
+      functionId: "chat.master.resume",
+      requestId: requestId ?? `resume-cycle-${cycleNumber}`,
+      agentId: "master",
+      metadata: {
+        cycleNumber,
+        subAgentResultsCount: options.subAgentResults.length,
+      },
+    }),
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`${logPrefix} Tool started: ${toolCall.toolName}`, {
         toolCallId: toolCall.toolCallId,

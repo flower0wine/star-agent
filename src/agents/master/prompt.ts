@@ -22,7 +22,7 @@ export function getMasterSystemPrompt(context: MasterAgentContext): string {
 
 # 用户信息
 - GitHub 用户名: ${username}
-- 仓库总数: ${reposCount} 个
+- Star 仓库总数: ${reposCount} 个
 
 
 # 任务

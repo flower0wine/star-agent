@@ -1,4 +1,5 @@
 import type { LanguageModelUsage, UIMessage } from "ai";
+import dayjs from "dayjs";
 
 export interface ChatMessageTiming {
   startedAt: string;
@@ -20,12 +21,12 @@ interface BuildChatMessageMetadataOptions {
 }
 
 export function buildChatMessageMetadata(
-  options: BuildChatMessageMetadataOptions
+  options: BuildChatMessageMetadataOptions,
 ): ChatMessageMetadata {
   const { totalUsage, startedAt, finishedAt } = options;
   const durationMs = Math.max(
     0,
-    new Date(finishedAt).getTime() - new Date(startedAt).getTime()
+    dayjs(finishedAt).valueOf() - dayjs(startedAt).valueOf(),
   );
 
   return {

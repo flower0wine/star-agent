@@ -154,3 +154,4 @@ src/
 - This is a prototype/starter project with relaxed linting rules
 - Many strict TypeScript rules are disabled for faster development
 - Console.log is allowed for debugging
+- The bun tsc and bun lint commands must be requested for me to execute; otherwise, permission issues within the sandbox will lead to strange 'debug not found' errors and tsc errors.

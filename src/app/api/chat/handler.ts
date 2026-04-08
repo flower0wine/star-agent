@@ -5,10 +5,11 @@
  */
 
 import { convertToModelMessages, streamText, stepCountIs } from "ai";
-import type { UIMessage } from "ai";
+import dayjs from "dayjs";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
+import { buildTelemetrySettings } from "@/lib/observability/telemetry";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
@@ -24,9 +25,9 @@ import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
 export async function handleStarAgent(
   requestId: string,
   body: ChatRequestBody,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
 ): Promise<Response> {
-  const generationStartedAt = new Date().toISOString();
+  const generationStartedAt = dayjs().toISOString();
 
   // Support both legacy top-level fields and new context-based fields
   const username = body.username || body.context?.username;
@@ -35,7 +36,7 @@ export async function handleStarAgent(
   if (!username) {
     return NextResponse.json(
       { error: "GitHub username is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -52,7 +53,7 @@ export async function handleStarAgent(
   if (finalRepos.length === 0) {
     return NextResponse.json(
       { error: "No starred repositories found for this user" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -84,6 +85,15 @@ export async function handleStarAgent(
     messages: modelMessages,
     stopWhen: stepCountIs(100),
     abortSignal,
+    experimental_telemetry: buildTelemetrySettings({
+      functionId: "chat.star.stream",
+      requestId,
+      agentId: "star",
+      metadata: {
+        username,
+        reposCount: finalRepos.length,
+      },
+    }),
     // 添加工具调用生命周期回调，用于记录工具执行时间
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`[${requestId}] Tool started: ${toolCall.toolName}`, {
@@ -118,7 +128,7 @@ export async function handleStarAgent(
     messageMetadata: ({ part }) => {
       // Send total usage when generation is finished
       if (part.type === "finish") {
-        const generationFinishedAt = new Date().toISOString();
+        const generationFinishedAt = dayjs().toISOString();
         const metadata = buildChatMessageMetadata({
           totalUsage: part.totalUsage,
           startedAt: generationStartedAt,
@@ -131,4 +141,3 @@ export async function handleStarAgent(
     },
   });
 }
-
