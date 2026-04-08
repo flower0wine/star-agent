@@ -12,6 +12,10 @@ import type { ToolCategory, ToolMeta } from "@/lib/agents/tool-registry";
 import { getToolInputSchema } from "@/lib/agents/base/tool-definitions";
 import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
 import { validateDefaultInputWithSchema } from "@/lib/agents/base/tool-default-validator";
+import {
+  DEFAULT_CREATE_SUBAGENT_PARAMETERS,
+  resolveCreateSubAgentParameterConfig,
+} from "@/lib/agents/sub-agent/dynamic-schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +38,7 @@ interface AgentToolCenterProps {
     enabled?: boolean;
     defaultInput?: Record<string, unknown>;
     boundSubAgentIds?: string[];
+    dynamicParameters?: unknown;
   }>;
   onToolConfigChange: (
     toolId: string,
@@ -41,6 +46,7 @@ interface AgentToolCenterProps {
       enabled?: boolean;
       defaultInput?: Record<string, unknown>;
       boundSubAgentIds?: string[];
+      dynamicParameters?: unknown;
     }
   ) => void;
   onToolConfigsChange: (
@@ -48,6 +54,7 @@ interface AgentToolCenterProps {
       enabled?: boolean;
       defaultInput?: Record<string, unknown>;
       boundSubAgentIds?: string[];
+      dynamicParameters?: unknown;
     }>
   ) => void;
 }
@@ -87,6 +94,8 @@ export function AgentToolCenter({
   const enabledToolSet = useMemo(() => new Set(effectiveEnabledTools), [effectiveEnabledTools]);
   const [defaultInputDrafts, setDefaultInputDrafts] = useState<Record<string, string>>({});
   const [defaultInputErrors, setDefaultInputErrors] = useState<Record<string, string | undefined>>({});
+  const [dynamicParamDrafts, setDynamicParamDrafts] = useState<Record<string, string>>({});
+  const [dynamicParamErrors, setDynamicParamErrors] = useState<Record<string, string | undefined>>({});
   const enabledSubAgentProfiles = useMemo(
     () => subAgentProfiles.filter(profile => profile.enabled),
     [subAgentProfiles]
@@ -99,7 +108,26 @@ export function AgentToolCenter({
       nextDrafts[tool.id] = defaultInput ? JSON.stringify(defaultInput, null, 2) : "";
     }
     setDefaultInputDrafts(nextDrafts);
+    const nextDynamicDrafts: Record<string, string> = {};
+    const nextDynamicErrors: Record<string, string | undefined> = {};
+    for (const tool of availableTools) {
+      const dynamicParameters = toolConfigs[tool.id]?.dynamicParameters;
+      if (tool.id === "createSubAgent") {
+        try {
+          const resolved = resolveCreateSubAgentParameterConfig(dynamicParameters);
+          nextDynamicDrafts[tool.id] = JSON.stringify(resolved, null, 2);
+          nextDynamicErrors[tool.id] = undefined;
+        } catch (error) {
+          nextDynamicDrafts[tool.id] = JSON.stringify(DEFAULT_CREATE_SUBAGENT_PARAMETERS, null, 2);
+          nextDynamicErrors[tool.id] = error instanceof Error ? error.message : "动态参数配置非法";
+        }
+      } else {
+        nextDynamicDrafts[tool.id] = "";
+      }
+    }
+    setDynamicParamDrafts(nextDynamicDrafts);
     setDefaultInputErrors({});
+    setDynamicParamErrors(nextDynamicErrors);
   }, [availableTools, toolConfigs]);
 
   const filteredTools = useMemo(() => {
@@ -193,6 +221,29 @@ export function AgentToolCenter({
       return;
     }
     onToolConfigChange(toolId, { boundSubAgentIds: [value] });
+  };
+
+  const handleDynamicParametersChange = (toolId: string, nextValue: string) => {
+    setDynamicParamDrafts(current => ({ ...current, [toolId]: nextValue }));
+
+    if (!nextValue.trim()) {
+      setDynamicParamErrors(current => ({ ...current, [toolId]: "参数配置不能为空" }));
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(nextValue) as unknown;
+      const resolved = resolveCreateSubAgentParameterConfig(parsed);
+      setDynamicParamErrors(current => ({ ...current, [toolId]: undefined }));
+      onToolConfigChange(toolId, {
+        dynamicParameters: resolved,
+      });
+    } catch (error) {
+      setDynamicParamErrors(current => ({
+        ...current,
+        [toolId]: error instanceof Error ? error.message : "参数配置格式错误",
+      }));
+    }
   };
 
   return (
@@ -319,6 +370,19 @@ export function AgentToolCenter({
                           </Select>
                           <span className="block text-[11px] text-muted-foreground">
                             仅支持单绑定。运行时将自动使用该 SubAgent，模型无需传入 subagentId。
+                          </span>
+                          <Label className="pt-1 text-[11px] text-muted-foreground">动态参数配置（JSON）</Label>
+                          <Textarea
+                            value={dynamicParamDrafts[tool.id] || JSON.stringify(DEFAULT_CREATE_SUBAGENT_PARAMETERS, null, 2)}
+                            onChange={(event) => handleDynamicParametersChange(tool.id, event.target.value)}
+                            rows={8}
+                            className="font-mono text-[11px]"
+                          />
+                          {dynamicParamErrors[tool.id] && (
+                            <span className="block text-[11px] text-destructive">{dynamicParamErrors[tool.id]}</span>
+                          )}
+                          <span className="block text-[11px] text-muted-foreground">
+                            可配置 role=task/rangeStart/rangeEnd/runtimeVar。通过 schema 生成 tool 入参并注入 SubAgent 提示词变量。
                           </span>
                         </span>
                       )}

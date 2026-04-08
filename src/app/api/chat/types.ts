@@ -18,6 +18,7 @@ export interface AgentConfigPayload {
     enabled?: boolean;
     defaultInput?: Record<string, unknown>;
     boundSubAgentIds?: string[];
+    dynamicParameters?: unknown;
   }>;
   /** 动态自定义参数 */
   customParams?: Record<string, unknown>;

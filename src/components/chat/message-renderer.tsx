@@ -117,6 +117,7 @@ interface CreateSubAgentToolOutput {
 
 interface CreateSubAgentToolInput {
   task?: string;
+  [key: string]: unknown;
 }
 
 interface SubAgentToolPart {
@@ -227,6 +228,7 @@ export const MessageRenderer = memo(({
         if (part.state === "output-available") {
           const output = (part.output || {}) as CreateSubAgentToolOutput;
           const input = (part.input || {}) as CreateSubAgentToolInput;
+          const dynamicParamEntries = Object.entries(input).filter(([key]) => key !== "task");
           const taskId = output.taskId;
           const subAgentLabel = [output.subAgent?.profileId]
             .filter(Boolean)
@@ -262,6 +264,11 @@ export const MessageRenderer = memo(({
                 </div>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                {dynamicParamEntries.map(([key, value]) => (
+                  <span key={`${toolType}-${i}-${key}`} className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
+                    {key}: {String(value)}
+                  </span>
+                ))}
                 {subAgentLabel && (
                   <span className="rounded-md border border-border/80 px-2 py-0.5 text-muted-foreground">
                     {subAgentLabel}
@@ -318,7 +325,11 @@ export const MessageRenderer = memo(({
         return null;
       }
 
-      if (isStaticToolUIPart(part) && part.type === "tool-displayRepositories") {
+      const partType = typeof part === "object" && part !== null && "type" in part
+        ? (part as { type?: unknown }).type
+        : undefined;
+
+      if (partType === "tool-displayRepositories" && isStaticToolUIPart(part)) {
         switch (part.state) {
           case "input-streaming":
             return (

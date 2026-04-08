@@ -1,5 +1,4 @@
 import { tool } from "ai";
-import { z } from "zod";
 import type { GitHubRepo } from "@/lib/github/api";
 import { getSubAgentManager } from "@/lib/agents/sub-agent/manager";
 import type {
@@ -9,12 +8,25 @@ import type { AgentToolConfig } from "@/lib/agents/base/types";
 import { buildSubAgentRuntimeVariables } from "@/lib/agents/sub-agent/runtime-variables";
 import { resolveBoundSubAgentProfile } from "@/lib/agents/sub-agent/bindings";
 import { buildResolvedTemplateVars } from "@/lib/agents/sub-agent/template-renderer";
+import {
+  buildCreateSubAgentInputSchema,
+  buildCreateSubAgentToolDescription,
+  parseCreateSubAgentExecutionInput,
+  resolveCreateSubAgentParameterConfig,
+} from "@/lib/agents/sub-agent/dynamic-schema";
 
-const createSubAgentInputSchema = z.object({
-  task: z.string().min(1).describe("派发给 SubAgent 的任务描述"),
-});
-
-export interface CreateSubAgentInput extends z.infer<typeof createSubAgentInputSchema> {}
+function extractReposByRange(
+  repos: GitHubRepo[],
+  rangeStart?: number,
+  rangeEnd?: number
+): GitHubRepo[] {
+  if (rangeStart === undefined && rangeEnd === undefined) {
+    return repos;
+  }
+  const start = rangeStart === undefined ? 0 : Math.max(0, Math.floor(rangeStart));
+  const endBase = rangeEnd === undefined ? repos.length : Math.max(start, Math.floor(rangeEnd));
+  return repos.slice(start, Math.min(endBase, repos.length));
+}
 
 export function createCreateSubAgentTool(
   repos: GitHubRepo[],
@@ -24,31 +36,41 @@ export function createCreateSubAgentTool(
   customParams?: Record<string, unknown>,
   toolConfig?: AgentToolConfig
 ) {
+  const paramConfig = resolveCreateSubAgentParameterConfig(toolConfig?.dynamicParameters);
+  const inputSchema = buildCreateSubAgentInputSchema(paramConfig);
+  const description = buildCreateSubAgentToolDescription(paramConfig);
+
   return tool({
-    description: "使用预配置绑定的 SubAgent 创建异步子任务并执行",
-    inputSchema: createSubAgentInputSchema,
-    execute: async (params: CreateSubAgentInput): Promise<CreateSubAgentTaskOutput & { __duration: number }> => {
+    description,
+    inputSchema,
+    execute: async (params: unknown): Promise<CreateSubAgentTaskOutput & { __duration: number }> => {
       const startTime = Date.now();
       const manager = getSubAgentManager();
       const profile = resolveBoundSubAgentProfile({
         customParams,
         toolConfig,
       });
+      const validatedInput = inputSchema.parse(params) as Record<string, unknown>;
+      const parsed = parseCreateSubAgentExecutionInput(validatedInput, paramConfig);
+      const selectedRepos = extractReposByRange(repos, parsed.rangeStart, parsed.rangeEnd);
       const runtimeVars = buildSubAgentRuntimeVariables({
         username,
         parentAgentId,
-        task: params.task,
-        repos,
+        task: parsed.task,
+        repos: selectedRepos,
       });
       const resolvedVars = buildResolvedTemplateVars({
-        runtimeVars,
+        runtimeVars: {
+          ...runtimeVars,
+          ...parsed.runtimeParams,
+        },
         varSchema: profile.varSchema,
       });
 
       const result = manager.addTask(
         {
-          task: params.task,
-          repos,
+          task: parsed.task,
+          repos: selectedRepos,
           username,
           progress: 0,
           parentAgentId,

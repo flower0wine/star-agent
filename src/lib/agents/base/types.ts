@@ -9,6 +9,7 @@ export interface AgentToolConfig {
   enabled?: boolean;
   defaultInput?: Record<string, unknown>;
   boundSubAgentIds?: string[];
+  dynamicParameters?: unknown;
 }
 
 export interface ToolFactoryContext {

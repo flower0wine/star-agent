@@ -40,6 +40,7 @@ export interface AgentDynamicConfig {
     enabled?: boolean;
     defaultInput?: Record<string, unknown>;
     boundSubAgentIds?: string[];
+    dynamicParameters?: unknown;
   }>;
   /** 自定义参数 */
   customParams: Record<string, unknown>;

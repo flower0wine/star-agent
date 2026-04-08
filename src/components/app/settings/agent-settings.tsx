@@ -489,6 +489,7 @@ function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
   enabled?: boolean;
   defaultInput?: Record<string, unknown>;
   boundSubAgentIds?: string[];
+  dynamicParameters?: unknown;
 }> {
   if (!toolConfigs || typeof toolConfigs !== "object") {
     return {};
@@ -503,6 +504,7 @@ function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
       enabled?: boolean;
       defaultInput?: Record<string, unknown>;
       boundSubAgentIds?: string[];
+      dynamicParameters?: unknown;
     };
     acc[toolId] = {
       enabled: typedConfig.enabled,
@@ -510,9 +512,15 @@ function readAgentToolConfigs(toolConfigs: unknown): Record<string, {
       boundSubAgentIds: Array.isArray(typedConfig.boundSubAgentIds)
         ? typedConfig.boundSubAgentIds.filter((id): id is string => typeof id === "string")
         : undefined,
+      dynamicParameters: typedConfig.dynamicParameters,
     };
     return acc;
-  }, {} as Record<string, { enabled?: boolean; defaultInput?: Record<string, unknown>; boundSubAgentIds?: string[] }>);
+  }, {} as Record<string, {
+    enabled?: boolean;
+    defaultInput?: Record<string, unknown>;
+    boundSubAgentIds?: string[];
+    dynamicParameters?: unknown;
+  }>);
 }
 
 function readSubAgentProfiles(customParams: Record<string, unknown>): {
@@ -678,6 +686,7 @@ export function AgentSettings() {
       enabled?: boolean;
       defaultInput?: Record<string, unknown>;
       boundSubAgentIds?: string[];
+      dynamicParameters?: unknown;
     }
   ) => {
     await activeState.updateDynamicConfig({
@@ -695,6 +704,7 @@ export function AgentSettings() {
       enabled?: boolean;
       defaultInput?: Record<string, unknown>;
       boundSubAgentIds?: string[];
+      dynamicParameters?: unknown;
     }>
   ) => {
     await activeState.updateDynamicConfig({

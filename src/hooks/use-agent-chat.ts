@@ -33,6 +33,7 @@ export interface AgentRuntimeConfig {
     enabled?: boolean;
     defaultInput?: Record<string, unknown>;
     boundSubAgentIds?: string[];
+    dynamicParameters?: unknown;
   }>;
   customParams?: Record<string, unknown>;
   staticParams?: Record<string, unknown>;
