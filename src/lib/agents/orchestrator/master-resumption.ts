@@ -49,7 +49,13 @@ function formatResultsAsMessage(
       sections.push("\n结果:");
       result.messages.forEach((msg) => {
         msg.parts.forEach((part) => {
-          if (typeof part === "object" && part !== null && "text" in part) {
+          if (
+            typeof part === "object"
+            && part !== null
+            && "type" in part
+            && (part as { type?: string }).type === "text"
+            && "text" in part
+          ) {
             const textPart = part as { text: string };
             sections.push(textPart.text);
           }

@@ -201,17 +201,16 @@ export class AgentOrchestrator {
    * Create sub-agent result from task
    */
   private createSubAgentResult(task: SubAgentTask): SubAgentResult {
-    const messages: UIMessage[] = task.messages?.length
-      ? task.messages
-      : task.result
-        ? [
-            {
-              id: `${task.id}-result`,
-              role: "assistant",
-              parts: [{ type: "text", text: task.result }],
-            },
-          ]
-        : [];
+    const finalOutputText = this.extractFinalOutputText(task);
+    const messages: UIMessage[] = finalOutputText
+      ? [
+          {
+            id: `${task.id}-result`,
+            role: "assistant",
+            parts: [{ type: "text", text: finalOutputText }],
+          },
+        ]
+      : [];
 
     return {
       taskId: task.id,
@@ -221,6 +220,32 @@ export class AgentOrchestrator {
       error: task.error,
       completedAt: task.completedAt || new Date(),
     };
+  }
+
+  private extractFinalOutputText(task: SubAgentTask): string {
+    if (task.result?.trim()) {
+      return task.result.trim();
+    }
+
+    if (!task.messages?.length) {
+      return "";
+    }
+
+    return task.messages
+      .flatMap(msg => msg.parts)
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          typeof part === "object"
+          && part !== null
+          && "type" in part
+          && (part as { type?: string }).type === "text"
+          && "text" in part
+          && typeof (part as { text?: unknown }).text === "string",
+      )
+      .map(part => part.text.trim())
+      .filter(Boolean)
+      .join("\n")
+      .trim();
   }
 
   /**
@@ -275,7 +300,13 @@ export class AgentOrchestrator {
         sections.push("**结果**:\n");
         result.messages.forEach((msg) => {
           msg.parts.forEach((part) => {
-            if (typeof part === "object" && part !== null && "text" in part) {
+            if (
+              typeof part === "object"
+              && part !== null
+              && "type" in part
+              && (part as { type?: string }).type === "text"
+              && "text" in part
+            ) {
               sections.push(part.text);
             }
           });
