@@ -143,3 +143,13 @@ export interface CreateSubAgentTaskOutput {
   async: true;
   subAgent: SubAgentMetadata;
 }
+
+export interface CreateSubAgentToolFailedOutput {
+  status: "failed";
+  message: string;
+  error: string;
+  code?: string;
+  recoverable: true;
+}
+
+export type CreateSubAgentToolOutput = CreateSubAgentTaskOutput | CreateSubAgentToolFailedOutput;

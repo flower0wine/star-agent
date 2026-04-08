@@ -104,8 +104,11 @@ export interface MessageRendererProps {
 
 interface CreateSubAgentToolOutput {
   taskId?: string;
-  status?: "launched";
+  status?: "launched" | "failed";
   message?: string;
+  error?: string;
+  code?: string;
+  recoverable?: true;
   async?: true;
   __duration?: number;
   subAgent?: {
@@ -228,6 +231,7 @@ export const MessageRenderer = memo(({
         if (part.state === "output-available") {
           const output = (part.output || {}) as CreateSubAgentToolOutput;
           const input = (part.input || {}) as CreateSubAgentToolInput;
+          const isFailed = output.status === "failed";
           const dynamicParamEntries = Object.entries(input).filter(([key]) => key !== "task");
           const taskId = output.taskId;
           const subAgentLabel = [output.subAgent?.profileId]
@@ -239,13 +243,13 @@ export const MessageRenderer = memo(({
             <div className="w-full rounded-xl border border-border/70 bg-muted/15 px-3 py-3 text-left transition hover:border-primary/35 hover:bg-muted/25">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-2">
-                  <div className="mt-0.5 rounded-md bg-primary/10 p-1.5 text-primary">
+                  <div className={`mt-0.5 rounded-md p-1.5 ${isFailed ? "bg-destructive/15 text-destructive" : "bg-primary/10 text-primary"}`}>
                     <BotIcon className="size-3.5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium text-sm">子 Agent 已创建</div>
+                    <div className="font-medium text-sm">{isFailed ? "子 Agent 创建失败" : "子 Agent 已创建"}</div>
                     <div className="mt-1 text-muted-foreground text-xs">
-                      {output.message || "任务已分配到子 Agent 处理"}
+                      {output.message || (isFailed ? "请根据错误提示修复后重试" : "任务已分配到子 Agent 处理")}
                     </div>
                   </div>
                 </div>
@@ -253,6 +257,12 @@ export const MessageRenderer = memo(({
                   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 )}
               </div>
+              {isFailed && output.error && (
+                <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                  {output.error}
+                  {output.code ? ` (${output.code})` : ""}
+                </div>
+              )}
               {output.subAgent?.profileId && (
                 <div className="mt-2 rounded-md bg-background/70 px-2 py-1.5 text-xs text-foreground/90">
                   <span className="font-medium">SubAgent:</span> {output.subAgent.profileId}

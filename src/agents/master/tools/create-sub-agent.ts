@@ -2,12 +2,13 @@ import { tool } from "ai";
 import type { GitHubRepo } from "@/lib/github/api";
 import { getSubAgentManager } from "@/lib/agents/sub-agent/manager";
 import type {
-  CreateSubAgentTaskOutput,
+  CreateSubAgentToolOutput,
 } from "@/lib/agents/sub-agent/types";
 import type { AgentToolConfig } from "@/lib/agents/base/types";
 import { buildSubAgentRuntimeVariables } from "@/lib/agents/sub-agent/runtime-variables";
 import { resolveBoundSubAgentProfile } from "@/lib/agents/sub-agent/bindings";
 import { buildResolvedTemplateVars } from "@/lib/agents/sub-agent/template-renderer";
+import { SubAgentConfigError } from "@/lib/agents/sub-agent/profile-schema";
 import {
   buildCreateSubAgentInputSchema,
   buildCreateSubAgentToolDescription,
@@ -43,50 +44,69 @@ export function createCreateSubAgentTool(
   return tool({
     description,
     inputSchema,
-    execute: async (params: unknown): Promise<CreateSubAgentTaskOutput & { __duration: number }> => {
+    execute: async (params: unknown): Promise<CreateSubAgentToolOutput & { __duration: number }> => {
       const startTime = Date.now();
-      const manager = getSubAgentManager();
-      const profile = resolveBoundSubAgentProfile({
-        customParams,
-        toolConfig,
-      });
-      const validatedInput = inputSchema.parse(params) as Record<string, unknown>;
-      const parsed = parseCreateSubAgentExecutionInput(validatedInput, paramConfig);
-      const selectedRepos = extractReposByRange(repos, parsed.rangeStart, parsed.rangeEnd);
-      const runtimeVars = buildSubAgentRuntimeVariables({
-        username,
-        parentAgentId,
-        task: parsed.task,
-        repos: selectedRepos,
-      });
-      const resolvedVars = buildResolvedTemplateVars({
-        runtimeVars: {
-          ...runtimeVars,
-          ...parsed.runtimeParams,
-        },
-        varSchema: profile.varSchema,
-      });
 
-      const result = manager.addTask(
-        {
+      try {
+        const manager = getSubAgentManager();
+        const profile = resolveBoundSubAgentProfile({
+          customParams,
+          toolConfig,
+        });
+        const validatedInput = inputSchema.parse(params) as Record<string, unknown>;
+        const parsed = parseCreateSubAgentExecutionInput(validatedInput, paramConfig);
+        const selectedRepos = extractReposByRange(repos, parsed.rangeStart, parsed.rangeEnd);
+        const runtimeVars = buildSubAgentRuntimeVariables({
+          username,
+          parentAgentId,
           task: parsed.task,
           repos: selectedRepos,
-          username,
-          progress: 0,
-          parentAgentId,
-          profileId: profile.id,
-          profileVersion: profile.version,
-          originTool: "createSubAgent",
-          runtimeVars: resolvedVars,
-          profileSnapshot: profile,
-        },
-        sessionId
-      );
+        });
+        const resolvedVars = buildResolvedTemplateVars({
+          runtimeVars: {
+            ...runtimeVars,
+            ...parsed.runtimeParams,
+          },
+          varSchema: profile.varSchema,
+        });
 
-      return {
-        ...result,
-        __duration: Date.now() - startTime,
-      };
+        const result = manager.addTask(
+          {
+            task: parsed.task,
+            repos: selectedRepos,
+            username,
+            progress: 0,
+            parentAgentId,
+            profileId: profile.id,
+            profileVersion: profile.version,
+            originTool: "createSubAgent",
+            runtimeVars: resolvedVars,
+            profileSnapshot: profile,
+          },
+          sessionId
+        );
+
+        return {
+          ...result,
+          __duration: Date.now() - startTime,
+        };
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : "createSubAgent 执行失败";
+        const code = error instanceof SubAgentConfigError
+          ? error.code
+          : undefined;
+
+        return {
+          status: "failed",
+          message: "未能创建子 Agent，请先修复配置后重试。",
+          error: message,
+          code,
+          recoverable: true,
+          __duration: Date.now() - startTime,
+        };
+      }
     },
   });
 }

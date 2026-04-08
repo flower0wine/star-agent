@@ -32,6 +32,40 @@ const subAgentProfileSchema = z.object({
 
 const subAgentProfilesSchema = z.array(subAgentProfileSchema);
 
+function formatProfileSchemaIssue(issue: z.ZodIssue): string {
+  const path = issue.path;
+  const profileIndex = typeof path[0] === "number" ? path[0] : undefined;
+  const field = typeof path[1] === "string" ? path[1] : undefined;
+
+  if (
+    field === "toolConfigs"
+    && issue.code === "invalid_type"
+    && "received" in issue
+    && issue.received === "undefined"
+  ) {
+    const indexText = profileIndex === undefined ? "" : `第 ${profileIndex + 1} 个`;
+    return `${indexText} SubAgent Profile 缺少 "toolConfigs" 配置（常见于旧版本数据）。请在设置页打开对应 Profile 并保存一次，或新建 Profile。`;
+  }
+
+  if (
+    field === "name"
+    && issue.code === "too_small"
+  ) {
+    const indexText = profileIndex === undefined ? "" : `第 ${profileIndex + 1} 个`;
+    return `${indexText} SubAgent Profile 的名称不能为空。`;
+  }
+
+  if (
+    field === "id"
+    && issue.code === "too_small"
+  ) {
+    const indexText = profileIndex === undefined ? "" : `第 ${profileIndex + 1} 个`;
+    return `${indexText} SubAgent Profile 的 ID 不能为空。`;
+  }
+
+  return `${path.join(".")}: ${issue.message}`;
+}
+
 export class SubAgentConfigError extends Error {
   code: string;
 
@@ -47,7 +81,7 @@ export function parseSubAgentProfiles(raw: unknown): SubAgentProfile[] {
   if (!parsed.success) {
     throw new SubAgentConfigError(
       "SUBAGENT_PROFILE_SCHEMA_INVALID",
-      parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; ")
+      parsed.error.issues.map(formatProfileSchemaIssue).join("; ")
     );
   }
 

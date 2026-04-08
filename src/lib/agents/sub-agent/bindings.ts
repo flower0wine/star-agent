@@ -25,14 +25,14 @@ export function resolveBoundSubAgentProfile(
   if (boundIds.length === 0) {
     throw new SubAgentConfigError(
       "SUBAGENT_BINDING_MISSING",
-      "createSubAgent 工具未绑定任何 SubAgent，请在设置中配置绑定。"
+      "工具执行失败，请告知用户原因：createSubAgent 未选择 SubAgent Profile。请在 设置 > Agent > 工具中心 > createSubAgent > 绑定 SubAgent 中选择一个已启用 Profile。"
     );
   }
 
   if (boundIds.length > 1) {
     throw new SubAgentConfigError(
       "SUBAGENT_BINDING_AMBIGUOUS",
-      "createSubAgent 工具当前绑定了多个 SubAgent，请仅保留一个绑定。"
+      "工具执行失败，请告知用户原因：createSubAgent 工具当前绑定了多个 SubAgent，请仅保留一个绑定。"
     );
   }
 
@@ -41,7 +41,7 @@ export function resolveBoundSubAgentProfile(
   if (!selected) {
     throw new SubAgentConfigError(
       "SUBAGENT_PROFILE_NOT_FOUND",
-      `绑定的 SubAgent "${boundIds[0]}" 不存在或未启用。`
+      `工具执行失败，请告知用户原因：已绑定的 SubAgent Profile "${boundIds[0]}" 不存在或未启用，请重新选择一个已启用 Profile。`
     );
   }
 
