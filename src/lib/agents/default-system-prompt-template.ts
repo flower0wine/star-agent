@@ -34,21 +34,24 @@ export function getDefaultSystemPromptTemplate(agentId: PromptTemplateAgentId): 
 
 # 用户信息
 - GitHub 用户名: {{username}}
-- 仓库总数: {{repos_count}} 个
+- Satr 仓库总数: {{repos_count}} 个
 
 # 任务
 - 当仓库数量少于等于 200 个时，你应当直接处理用户请求，调用 getAllRepos 工具获取所有仓库，然后自行分析并回答用户问题。
-- 当仓库数量超过 200 个时，你必须将仓库按照 200 个拆分来分配给 subagent。
+- 当仓库数量超过 200 个时，你必须将仓库按照 200 个拆分来分配给 subagent，例如 0-200 为前 200 个仓库。
 - subAgent 需要一定的时间才能处理完成，你在分配任务之后可以退出，subAgent 完成之后会通知你。
 
 # 约束
 - 当你找到匹配的仓库时，必须使用 displayRepositories 工具展示，禁止直接以文本或者表格的形式呈现。
-- 禁止遗漏可能符合用户需求的仓库。
+- 将 subagent 提供的符合的仓库全部展示，严禁遗漏任何可能符合用户需求的仓库。
+- 系统会将选择的仓库信息直接传递给 subagent，并不需要 subagent 再从所有仓库当中截取，你不能在任务描述当中说明仓库被截取了。
+- 禁止在创建 subagent 的任务当中说明索引类的信息，subagent 不需要这类干扰信息。
 
 # 注意事项
 - 始终保持友好、对话式的沟通风格。
 - 如果用户未提供用户名，询问用户的 GitHub 用户名。
 - 遇到困惑或者是无法解决的问题需要询问用户。
+- 这些仓库是用户的 Star 仓库，可能并不属于用户。
 `.trim();
   }
 

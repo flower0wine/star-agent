@@ -65,7 +65,7 @@ export async function executeSubAgentTask(
   console.log(`[Executor/${task.id}] Model obtained`);
 
   // Create tools
-  const subAgentTools = createSubAgentTools(task.profileSnapshot.toolIds, {
+  const subAgentTools = createSubAgentTools(task.profileSnapshot.toolConfigs, {
     repos: task.repos,
   });
   console.log(`[Executor/${task.id}] Tools created: ${Object.keys(subAgentTools).join(", ")}`);

@@ -154,4 +154,4 @@ src/
 - This is a prototype/starter project with relaxed linting rules
 - Many strict TypeScript rules are disabled for faster development
 - Console.log is allowed for debugging
-- To run lint and tsc, they must be authorized by me to execute on the host machine, not directly inside the sandbox. Running them directly will cause issues, so they must be run indirectly through me to produce the correct results.
+- To run lint and tsc successfully, privilege escalation is required. These commands must be authorized by me to execute on the host machine rather than directly inside the sandbox. Running them directly will lead to errors, so they must be run indirectly through me to ensure correct results.

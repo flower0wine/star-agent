@@ -23,7 +23,7 @@ export interface CreateSubAgentDynamicParameterConfig {
   parameters: CreateSubAgentDynamicParameter[];
 }
 
-const PARAM_KEY_REGEX = /^[a-zA-Z_]\w*$/;
+const PARAM_KEY_REGEX = /^[a-z_]\w*$/i;
 const RESERVED_RUNTIME_KEYS = new Set([
   "username",
   "repos_count",

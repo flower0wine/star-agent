@@ -10,11 +10,18 @@ const subAgentVarDefSchema = z.object({
   description: z.string().optional(),
 });
 
+const subAgentToolConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  defaultInput: z.record(z.string(), z.unknown()).optional(),
+  boundSubAgentIds: z.array(z.string().min(1)).optional(),
+  dynamicParameters: z.unknown().optional(),
+});
+
 const subAgentProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   enabled: z.boolean(),
-  toolIds: z.array(z.string().min(1)).min(1),
+  toolConfigs: z.record(z.string().min(1), subAgentToolConfigSchema),
   systemPromptTemplate: z.string().min(1),
   varSchema: z.record(z.string().regex(variableNameRegex), subAgentVarDefSchema),
   limits: z.object({

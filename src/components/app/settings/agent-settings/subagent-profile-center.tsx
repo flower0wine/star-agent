@@ -1,11 +1,13 @@
 import { CopyIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { AgentToolConfig } from "@/lib/agents/base/types";
 import type {
   SubAgentProfile,
   SubAgentVarDef,
   TemplateVariableType,
 } from "@/lib/agents/sub-agent/types";
 import { PREDEFINED_RUNTIME_VARIABLES } from "@/lib/agents/sub-agent/runtime-variables";
+import { DEFAULT_SUBAGENT_ENABLED_TOOL_IDS } from "@/lib/agents/sub-agent/tool-config";
 import type { TemplateVariableOption } from "@/components/ai-elements/editors/template-editor";
 import { getSubAgentCompatibleTools } from "@/lib/agents/tool-registry";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ToolConfigCenter } from "./tool-config-center";
 import { TemplateVariableTextarea } from "./template-variable-textarea";
 
 interface SubAgentProfileCenterProps {
@@ -51,7 +54,7 @@ export function createNewSubAgentProfile(existingProfiles: SubAgentProfile[]): S
     id,
     name: `SubAgent ${nextIndex}`,
     enabled: true,
-    toolIds: ["searchRepositories", "getRepositoryReadme"],
+    toolConfigs: {},
     systemPromptTemplate: [
       "你是一个由用户配置的子 Agent。",
       "当前任务: {{task}}",
@@ -82,6 +85,16 @@ export function SubAgentProfileCenter({
   onDelete,
 }: SubAgentProfileCenterProps) {
   const tools = useMemo(() => getSubAgentCompatibleTools(), []);
+  const defaultEnabledToolIdSet = useMemo(
+    () => new Set<string>(DEFAULT_SUBAGENT_ENABLED_TOOL_IDS),
+    []
+  );
+  const coreToolIds = useMemo(
+    () => tools
+      .filter(tool => tool.isCore && defaultEnabledToolIdSet.has(tool.id))
+      .map(tool => tool.id),
+    [defaultEnabledToolIdSet, tools]
+  );
   const builtInVariables = useMemo(() => PREDEFINED_RUNTIME_VARIABLES, []);
   const [draftProfile, setDraftProfile] = useState<SubAgentProfile | null>(profile);
   const [isDirty, setIsDirty] = useState(false);
@@ -120,6 +133,30 @@ export function SubAgentProfileCenter({
     }
   };
 
+  const variableOptions = useMemo<TemplateVariableOption[]>(() => {
+    const builtInVariableMap = new Map(builtInVariables.map(item => [item.name, item]));
+    if (!draftProfile) {
+      return builtInVariables.map(item => ({
+        name: item.name,
+        type: item.type,
+        description: item.description,
+      }));
+    }
+    const names = new Set<string>([
+      ...Object.keys(draftProfile.varSchema),
+      ...builtInVariables.map(item => item.name),
+    ]);
+    return Array.from(names, (name) => {
+      const builtInMeta = builtInVariableMap.get(name);
+      const profileMeta = draftProfile.varSchema[name];
+      return {
+        name,
+        type: profileMeta?.type || builtInMeta?.type,
+        description: profileMeta?.description || builtInMeta?.description,
+      };
+    });
+  }, [builtInVariables, draftProfile?.varSchema]);
+
   if (!draftProfile) {
     return (
       <Card className="border-border/70">
@@ -130,23 +167,6 @@ export function SubAgentProfileCenter({
       </Card>
     );
   }
-
-  const variableOptions = useMemo<TemplateVariableOption[]>(() => {
-    const builtInVariableMap = new Map(builtInVariables.map(item => [item.name, item]));
-    const names = new Set<string>([
-      ...Object.keys(draftProfile.varSchema),
-      ...builtInVariables.map(item => item.name),
-    ]);
-    return [...names].map((name) => {
-      const builtInMeta = builtInVariableMap.get(name);
-      const profileMeta = draftProfile.varSchema[name];
-      return {
-        name,
-        type: profileMeta?.type || builtInMeta?.type,
-        description: profileMeta?.description || builtInMeta?.description,
-      };
-    });
-  }, [builtInVariables, draftProfile.varSchema]);
 
   const updateVarSchema = (
     varName: string,
@@ -163,6 +183,28 @@ export function SubAgentProfileCenter({
         version: current.version + 1,
       };
     });
+  };
+
+  const handleToolConfigChange = (toolId: string, config: AgentToolConfig) => {
+    updateDraftProfile((current) => ({
+      ...current,
+      toolConfigs: {
+        ...current.toolConfigs,
+        [toolId]: {
+          ...current.toolConfigs[toolId],
+          ...config,
+        },
+      },
+      version: current.version + 1,
+    }));
+  };
+
+  const handleToolConfigsChange = (nextToolConfigs: Record<string, AgentToolConfig>) => {
+    updateDraftProfile((current) => ({
+      ...current,
+      toolConfigs: nextToolConfigs,
+      version: current.version + 1,
+    }));
   };
 
   return (
@@ -237,30 +279,17 @@ export function SubAgentProfileCenter({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>工具白名单</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {tools.map(tool => (
-                <label key={`${draftProfile.id}-${tool.id}`} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                  <Checkbox
-                    checked={draftProfile.toolIds.includes(tool.id)}
-                    onCheckedChange={(checked) =>
-                      updateDraftProfile((current) => {
-                        const nextToolIds = checked
-                          ? [...new Set([...current.toolIds, tool.id])]
-                          : current.toolIds.filter(id => id !== tool.id);
-                        return {
-                          ...current,
-                          toolIds: nextToolIds,
-                          version: current.version + 1,
-                        };
-                      })}
-                  />
-                  <span className="truncate">{tool.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          <ToolConfigCenter
+            panelId={`subagent-${draftProfile.id}`}
+            title="工具中心"
+            description="统一管理当前 SubAgent 可用工具与默认参数配置。默认推荐可一键恢复。"
+            availableTools={tools}
+            defaultEnabledToolIds={[...DEFAULT_SUBAGENT_ENABLED_TOOL_IDS]}
+            coreToolIds={coreToolIds}
+            toolConfigs={draftProfile.toolConfigs}
+            onToolConfigChange={handleToolConfigChange}
+            onToolConfigsChange={handleToolConfigsChange}
+          />
 
           <div className="space-y-2">
             <Label>System Prompt Template</Label>
