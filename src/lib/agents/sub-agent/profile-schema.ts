@@ -1,15 +1,6 @@
 import { z } from "zod";
 import type { SubAgentProfile } from "./types";
 
-const variableNameRegex = /^[a-z_]\w*$/i;
-
-const subAgentVarDefSchema = z.object({
-  type: z.enum(["string", "number", "boolean"]),
-  required: z.boolean().optional(),
-  defaultValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  description: z.string().optional(),
-});
-
 const subAgentToolConfigSchema = z.object({
   enabled: z.boolean().optional(),
   defaultInput: z.record(z.string(), z.unknown()).optional(),
@@ -23,7 +14,6 @@ const subAgentProfileSchema = z.object({
   enabled: z.boolean(),
   toolConfigs: z.record(z.string().min(1), subAgentToolConfigSchema),
   systemPromptTemplate: z.string().min(1),
-  varSchema: z.record(z.string().regex(variableNameRegex), subAgentVarDefSchema),
   limits: z.object({
     timeoutMs: z.number().int().min(1000).max(600000),
   }),

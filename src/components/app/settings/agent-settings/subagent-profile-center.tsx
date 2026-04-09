@@ -1,28 +1,17 @@
-import { CopyIcon, PlusIcon, TrashIcon } from "lucide-react";
+import { CopyIcon, TrashIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentToolConfig } from "@/lib/agents/base/types";
-import type {
-  SubAgentProfile,
-  SubAgentVarDef,
-  TemplateVariableType,
-} from "@/lib/agents/sub-agent/types";
+import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
 import { PREDEFINED_RUNTIME_VARIABLES } from "@/lib/agents/sub-agent/runtime-variables";
 import { DEFAULT_SUBAGENT_ENABLED_TOOL_IDS } from "@/lib/agents/sub-agent/tool-config";
+import { resolveCreateSubAgentParameterConfig } from "@/lib/agents/sub-agent/dynamic-schema";
 import type { TemplateVariableOption } from "@/components/ai-elements/editors/template-editor";
 import { getSubAgentCompatibleTools } from "@/lib/agents/tool-registry";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToolConfigCenter } from "./tool-config-center";
 import { TemplateVariableTextarea } from "./template-variable-textarea";
@@ -63,14 +52,6 @@ export function createNewSubAgentProfile(existingProfiles: SubAgentProfile[]): S
       "仓库上下文:",
       "{{repos_context}}",
     ].join("\n"),
-    varSchema: {
-      username: { type: "string", required: true },
-      repos_count: { type: "number", required: true },
-      repos_context: { type: "string", required: true },
-      task: { type: "string", required: true },
-      parent_agent_id: { type: "string" },
-      current_date: { type: "string" },
-    },
     limits: {
       timeoutMs: 120000,
     },
@@ -134,28 +115,39 @@ export function SubAgentProfileCenter({
   };
 
   const variableOptions = useMemo<TemplateVariableOption[]>(() => {
-    const builtInVariableMap = new Map(builtInVariables.map(item => [item.name, item]));
-    if (!draftProfile) {
-      return builtInVariables.map(item => ({
-        name: item.name,
-        type: item.type,
-        description: item.description,
-      }));
+    const mergedVariables = new Map<string, TemplateVariableOption>(
+      builtInVariables.map(item => [
+        item.name,
+        {
+          name: item.name,
+          type: item.type,
+          description: item.description,
+        },
+      ])
+    );
+
+    if (draftProfile) {
+      try {
+        const dynamicConfig = resolveCreateSubAgentParameterConfig(
+          draftProfile.toolConfigs.createSubAgent?.dynamicParameters
+        );
+        for (const parameter of dynamicConfig.parameters) {
+          if (mergedVariables.has(parameter.key)) {
+            continue;
+          }
+          mergedVariables.set(parameter.key, {
+            name: parameter.key,
+            type: parameter.type,
+            description: parameter.description || "来自 createSubAgent 动态参数",
+          });
+        }
+      } catch {
+        // Ignore invalid dynamic parameter config in hint generation.
+      }
     }
-    const names = new Set<string>([
-      ...Object.keys(draftProfile.varSchema),
-      ...builtInVariables.map(item => item.name),
-    ]);
-    return Array.from(names, (name) => {
-      const builtInMeta = builtInVariableMap.get(name);
-      const profileMeta = draftProfile.varSchema[name];
-      return {
-        name,
-        type: profileMeta?.type || builtInMeta?.type,
-        description: profileMeta?.description || builtInMeta?.description,
-      };
-    });
-  }, [builtInVariables, draftProfile?.varSchema]);
+
+    return [...mergedVariables.values()];
+  }, [builtInVariables, draftProfile]);
 
   if (!draftProfile) {
     return (
@@ -167,23 +159,6 @@ export function SubAgentProfileCenter({
       </Card>
     );
   }
-
-  const updateVarSchema = (
-    varName: string,
-    updater: (varDef: SubAgentVarDef) => SubAgentVarDef
-  ) => {
-    updateDraftProfile((current) => {
-      const nextDef = updater(current.varSchema[varName] || { type: "string" as const });
-      return {
-        ...current,
-        varSchema: {
-          ...current.varSchema,
-          [varName]: nextDef,
-        },
-        version: current.version + 1,
-      };
-    });
-  };
 
   const handleToolConfigChange = (toolId: string, config: AgentToolConfig) => {
     updateDraftProfile((current) => ({
@@ -305,117 +280,17 @@ export function SubAgentProfileCenter({
                 }))}
             />
             <p className="text-xs text-muted-foreground">
-              可直接使用变量占位 <code>{"{{变量名}}"}</code>。createSubAgent 仅传入任务文本，变量由运行时自动注入。
+              可直接使用变量占位 <code>{"{{变量名}}"}</code>。createSubAgent 的任务与动态参数会在运行时自动注入。
             </p>
           </div>
 
           <div className="space-y-4 rounded-lg border bg-muted/10 p-3">
-            <div className="flex items-center justify-between">
-              <Label>变量 Schema</Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  updateDraftProfile(current => ({
-                    ...current,
-                    varSchema: {
-                      ...current.varSchema,
-                      [`var_${Object.keys(current.varSchema).length + 1}`]: { type: "string" },
-                    },
-                    version: current.version + 1,
-                  }))}
-              >
-                <PlusIcon className="size-3.5" />
-                新增变量
-              </Button>
-            </div>
+            <Label>运行时变量建议</Label>
             <p className="text-xs text-muted-foreground">
-              变量白名单由此处变量名决定；勾选 required 后会在执行前强制校验必填。预定义运行时变量：
+              SubAgent 提示词直接使用运行时变量，不再维护变量 Schema。可用建议来自预定义运行时变量与 createSubAgent 动态参数：
               {" "}
-              {PREDEFINED_RUNTIME_VARIABLES.map(item => `${item.name} (${item.type})`).join(", ")}
+              {variableOptions.map(item => `${item.name} (${item.type || "string"})`).join(", ")}
             </p>
-            <div className="hidden grid-cols-[1fr_140px_120px] gap-2 px-1 text-xs text-muted-foreground sm:grid">
-              <span>变量名</span>
-              <span>类型</span>
-              <span>必填</span>
-            </div>
-            <div className="grid gap-2 rounded-md border bg-background p-2">
-              {Object.entries(draftProfile.varSchema).map(([varName, varDef]) => (
-                <div
-                  key={`${draftProfile.id}-${varName}`}
-                  className="grid gap-2 sm:grid-cols-[1fr_140px_120px]"
-                >
-                  <div>
-                    <Label className="text-xs text-muted-foreground sm:hidden">变量名</Label>
-                    <Input
-                      value={varName}
-                      onChange={(event) =>
-                        updateDraftProfile((current) => {
-                          const nextName = event.target.value.trim();
-                          if (!nextName || nextName === varName) {
-                            return current;
-                          }
-                          const nextSchema = { ...current.varSchema };
-                          nextSchema[nextName] = nextSchema[varName];
-                          delete nextSchema[varName];
-                          return {
-                            ...current,
-                            varSchema: nextSchema,
-                            version: current.version + 1,
-                          };
-                        })}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground sm:hidden">类型</Label>
-                    <Select
-                      value={varDef.type}
-                      onValueChange={(value) =>
-                        updateVarSchema(varName, current => ({
-                          ...current,
-                          type: value as TemplateVariableType,
-                        }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="string">string</SelectItem>
-                        <SelectItem value="number">number</SelectItem>
-                        <SelectItem value="boolean">boolean</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground sm:hidden">必填</Label>
-                    <label className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm">
-                      <Checkbox
-                        checked={varDef.required === true}
-                        onCheckedChange={(checked) =>
-                          updateVarSchema(varName, current => ({
-                            ...current,
-                            required: checked === true,
-                          }))}
-                      />
-                      required
-                    </label>
-                  </div>
-                  <div className="sm:col-span-3">
-                    <Label className="text-xs text-muted-foreground sm:hidden">描述</Label>
-                    <Input
-                      value={varDef.description || ""}
-                      placeholder="变量描述（会显示在模板编辑器建议中）"
-                      onChange={(event) =>
-                        updateVarSchema(varName, current => ({
-                          ...current,
-                          description: event.target.value.trim() || undefined,
-                        }))}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-1">

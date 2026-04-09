@@ -7,7 +7,6 @@ import type {
 import type { AgentToolConfig } from "@/lib/agents/base/types";
 import { buildSubAgentRuntimeVariables } from "@/lib/agents/sub-agent/runtime-variables";
 import { resolveBoundSubAgentProfile } from "@/lib/agents/sub-agent/bindings";
-import { buildResolvedTemplateVars } from "@/lib/agents/sub-agent/template-renderer";
 import { SubAgentConfigError } from "@/lib/agents/sub-agent/profile-schema";
 import {
   buildCreateSubAgentInputSchema,
@@ -62,13 +61,10 @@ export function createCreateSubAgentTool(
           task: parsed.task,
           repos: selectedRepos,
         });
-        const resolvedVars = buildResolvedTemplateVars({
-          runtimeVars: {
-            ...runtimeVars,
-            ...parsed.runtimeParams,
-          },
-          varSchema: profile.varSchema,
-        });
+        const resolvedVars = {
+          ...runtimeVars,
+          ...parsed.runtimeParams,
+        };
 
         const result = manager.addTask(
           {

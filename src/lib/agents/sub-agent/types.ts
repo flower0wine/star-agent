@@ -8,22 +8,12 @@ import type { UIMessage } from "ai";
 import type { GitHubRepo } from "@/lib/github/api";
 import type { AgentToolConfig } from "@/lib/agents/base/types";
 
-export type TemplateVariableType = "string" | "number" | "boolean";
-
-export interface SubAgentVarDef {
-  type: TemplateVariableType;
-  required?: boolean;
-  defaultValue?: string | number | boolean;
-  description?: string;
-}
-
 export interface SubAgentProfile {
   id: string;
   name: string;
   enabled: boolean;
   toolConfigs: Record<string, AgentToolConfig>;
   systemPromptTemplate: string;
-  varSchema: Record<string, SubAgentVarDef>;
   limits: {
     timeoutMs: number;
   };
