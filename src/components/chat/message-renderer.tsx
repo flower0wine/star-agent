@@ -27,7 +27,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { GitHubRepo } from "@/components/agents/star/github-repo";
+import {
+  DisplayRepositoriesToolPart,
+  SearchPatentsToolPart,
+} from "./tool-parts";
 import {
   UserIcon,
   BotIcon,
@@ -43,50 +46,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useCallback, useMemo, memo } from "react";
 import { ChatMessageMetrics } from "./metadata";
 import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
-
-// Helper type for tool output with repos
-interface RepoToolOutput {
-  repos?: Array<{
-    id: number;
-    name: string;
-    full_name: string;
-    description: string | null;
-    html_url: string;
-    stargazers_count: number;
-    forks_count: number;
-    language: string | null;
-    topics: string[];
-    updated_at: string;
-    owner: {
-      login: string;
-      avatar_url: string;
-      html_url: string;
-    };
-    license: { spdx_id: string } | null;
-    watchers_count: number;
-    visibility: string;
-  }>;
-  repo?: {
-    id: number;
-    name: string;
-    full_name: string;
-    description: string | null;
-    html_url: string;
-    stargazers_count: number;
-    forks_count: number;
-    language: string | null;
-    topics: string[];
-    updated_at: string;
-    owner: {
-      login: string;
-      avatar_url: string;
-      html_url: string;
-    };
-    license: { spdx_id: string } | null;
-    watchers_count: number;
-    visibility: string;
-  };
-}
 
 // Custom message type with usage metadata
 type ChatMessageWithUsage = UIMessage<ChatMessageMetadata>;
@@ -340,80 +299,23 @@ export const MessageRenderer = memo(({
         : undefined;
 
       if (partType === "tool-displayRepositories" && isStaticToolUIPart(part)) {
-        switch (part.state) {
-          case "input-streaming":
-            return (
-              <div key={`tool-displayRepositories-${i}`} className="flex items-center gap-2 text-muted-foreground text-sm">
-                <LoaderIcon className="size-4 animate-spin" />
-                Preparing repositories...
-              </div>
-            );
-          case "output-available": {
-            // 新的渐进式数据格式
-            const data = part.output as {
-              state: "loading" | "partial" | "complete";
-              repos: RepoToolOutput["repos"];
-              loaded: number;
-              total: number;
-              message: string;
-              __duration?: number;
-            };
+        return (
+          <DisplayRepositoriesToolPart
+            key={`tool-displayRepositories-${i}`}
+            part={part}
+            itemKey={`tool-displayRepositories-${i}`}
+          />
+        );
+      }
 
-            // Loading 状态
-            if (data.state === "loading") {
-              return (
-                <div key={`tool-displayRepositories-${i}`} className="flex items-center gap-2 text-muted-foreground">
-                  <LoaderIcon className="size-4 animate-spin" />
-                  <span className="text-sm">{data.message}</span>
-                </div>
-              );
-            }
-
-            // Partial 或 Complete 状态 - 显示仓库列表
-            if (data.repos && data.repos.length > 0) {
-              return (
-                <div key={`tool-displayRepositories-${i}`} className="space-y-3">
-                  {/* 进度信息 */}
-                  {data.state === "partial" && (
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                      <LoaderIcon className="size-3 animate-spin" />
-                      <span>{data.message}</span>
-                    </div>
-                  )}
-                  {data.state === "complete" && (
-                    <div className="flex items-center justify-between text-muted-foreground text-sm">
-                      <span>{data.message}</span>
-                      {data.__duration !== undefined && (
-                        <span className="text-xs">
-                          {data.__duration < 1000
-                            ? `${data.__duration}ms`
-                            : `${(data.__duration / 1000).toFixed(1)}s`}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {/* 仓库列表 */}
-                  <div className="max-h-150 overflow-auto">
-                    <div className="space-y-3">
-                      {data.repos.map((repo) => (
-                        <GitHubRepo key={repo.id} repo={repo} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          }
-          case "output-error":
-            return (
-              <div key={`tool-displayRepositories-${i}`} className="text-destructive text-sm">
-                Error: {part.errorText}
-              </div>
-            );
-          default:
-            return null;
-        }
+      if (partType === "tool-searchPatents" && isStaticToolUIPart(part)) {
+        return (
+          <SearchPatentsToolPart
+            key={`tool-searchPatents-${i}`}
+            part={part}
+            itemKey={`tool-searchPatents-${i}`}
+          />
+        );
       }
 
       // 4. Other tools (使用默认 Tool 组件展示 JSON)

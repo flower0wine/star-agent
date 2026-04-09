@@ -88,3 +88,9 @@ This directory contains shadcn/ui base components built on Radix UI primitives w
 ---
 
 **Purpose**: These are low-level building blocks. Higher-level components in `src/components/ai-elements/` compose these for specific AI application features.
+
+## Development Notes
+
+- **Card spacing gotcha (2026-04):**
+  - `CardHeader`/`CardContent` do not always provide enough vertical padding by default.
+  - If content looks flush, add explicit `pt/pb` in usage (example: header `pt-4 pb-2`, content `pt-0 pb-4`).
