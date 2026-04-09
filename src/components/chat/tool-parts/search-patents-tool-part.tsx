@@ -87,7 +87,7 @@ function PatentResultCard({ patent }: { patent: PatentItem }) {
   const abstractText = patent.abstract?.trim();
 
   return (
-    <Card className="rounded-lg border border-border/80 bg-background/70">
+    <Card className="rounded-lg border border-border bg-background">
       <CardHeader className="space-y-2 px-4 pt-4 pb-2">
         <div className="flex items-start justify-between gap-3">
           <Tooltip>
@@ -173,7 +173,7 @@ export function SearchPatentsToolPart({ part, itemKey }: SearchPatentsToolPartPr
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div key={itemKey} className="space-y-3 rounded-xl border border-border/70 bg-muted/10 p-3">
+      <div key={itemKey} className="space-y-3 rounded-xl border border-border bg-muted/15 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="rounded-full">
             Provider: {output.provider || "-"}
@@ -200,7 +200,7 @@ export function SearchPatentsToolPart({ part, itemKey }: SearchPatentsToolPartPr
 
         {patents.length === 0
           ? (
-              <div className="rounded-lg border border-dashed border-border/80 px-3 py-5 text-center text-muted-foreground text-sm">
+              <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-muted-foreground text-sm">
                 未检索到专利数据
               </div>
             )
@@ -209,11 +209,6 @@ export function SearchPatentsToolPart({ part, itemKey }: SearchPatentsToolPartPr
                 {patents.map((patent, index) => (
                   <PatentResultCard key={`${patent.patentId || "patent"}-${index}`} patent={patent} />
                 ))}
-                {patents.length > 0 && (
-                  <div className="text-center text-muted-foreground text-xs">
-                    Showing {patents.length} results
-                  </div>
-                )}
               </div>
             )}
       </div>
