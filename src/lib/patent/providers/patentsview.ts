@@ -123,7 +123,14 @@ export const patentsViewProvider: PatentProvider = {
   async searchPatents(params: PatentSearchParams, runtimeConfig: PatentRuntimeConfig): Promise<PatentSearchResult> {
     const apiKey = runtimeConfig.patentsView.apiKey;
     if (!apiKey) {
-      throw new Error("PatentsView 需要在 Agent 设置中配置 API Key (X-Api-Key)。");
+      if (runtimeConfig.serpApi.apiKey) {
+        throw new Error(
+          "当前 Provider 为 PatentsView，但未配置 PatentsView API Key。已检测到 SerpApi key，请在 Agent 设置将数据源切换为 SerpApi Google Patents。"
+        );
+      }
+      throw new Error(
+        "PatentsView 需要在 Agent 设置中配置 API Key (X-Api-Key)，或切换数据源为 SerpApi Google Patents。"
+      );
     }
 
     const baseUrl = runtimeConfig.patentsView.baseUrl.replace(/\/$/, "");

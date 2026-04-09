@@ -120,15 +120,15 @@ export function ChatView({
 }: ChatViewProps) {
   const router = useRouter();
   const { createNewConversation } = useChatHistoryStore();
-  const { config: starAgentConfig } = useAgentConfig<StarAgentStaticConfig>({
+  const { config: starAgentConfig, isLoading: isStarConfigLoading } = useAgentConfig<StarAgentStaticConfig>({
     agentId: "star",
     defaultStaticConfig: DEFAULT_STAR_STATIC_CONFIG,
   });
-  const { config: masterAgentConfig } = useAgentConfig<MasterAgentStaticConfig>({
+  const { config: masterAgentConfig, isLoading: isMasterConfigLoading } = useAgentConfig<MasterAgentStaticConfig>({
     agentId: "master",
     defaultStaticConfig: DEFAULT_MASTER_STATIC_CONFIG,
   });
-  const { config: patentAgentConfig } = useAgentConfig<PatentAgentStaticConfig>({
+  const { config: patentAgentConfig, isLoading: isPatentConfigLoading } = useAgentConfig<PatentAgentStaticConfig>({
     agentId: "patent",
     defaultStaticConfig: DEFAULT_PATENT_STATIC_CONFIG,
   });
@@ -214,6 +214,10 @@ export function ChatView({
   const selectedAgentConfig = selectedAgent === "star"
     ? starAgentConfig
     : (selectedAgent === "master" ? masterAgentConfig : patentAgentConfig);
+  const isSelectedAgentConfigLoading = selectedAgent === "star"
+    ? isStarConfigLoading
+    : (selectedAgent === "master" ? isMasterConfigLoading : isPatentConfigLoading);
+  const isSelectedAgentConfigReady = !!selectedAgentConfig && !isSelectedAgentConfigLoading;
   const subAgentProfiles = subAgentConfig?.dynamicConfig.customParams?.subAgentProfiles;
   const agentRuntimeConfig = selectedAgentConfig
     ? {
@@ -257,7 +261,7 @@ export function ChatView({
   });
 
   const isChatLoading = status === "submitted" || status === "streaming";
-  const isInputBusy = isChatLoading || isCreatingConversation;
+  const isInputBusy = isChatLoading || isCreatingConversation || !isSelectedAgentConfigReady;
   const subAgentHistorySignature = useMemo(
     () => createSubAgentHistorySignature(messages),
     [messages]

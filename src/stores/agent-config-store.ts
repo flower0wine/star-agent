@@ -9,6 +9,7 @@ import { create } from "zustand";
 
 import type { AgentConfiguration, AgentDynamicConfig } from "@/lib/storage";
 import {
+  getAgentConfig,
   getAllAgentConfigs,
   getOrCreateAgentConfig,
   resetAgentConfig,
@@ -96,12 +97,15 @@ export const useAgentConfigStore = create<AgentConfigStore>((set, get) => ({
     agentId: string,
     defaultStaticConfig: TStatic
   ): Promise<AgentConfiguration<TStatic>> => {
-    const { configs } = get();
-
-    // 检查缓存
-    const cached = configs.get(agentId);
-    if (cached) {
-      return cached as AgentConfiguration<TStatic>;
+    // 优先读取 IndexedDB，避免跨页面/跨 Tab 场景下使用过期内存缓存。
+    const latestFromDb = await getAgentConfig<TStatic>(agentId);
+    if (latestFromDb) {
+      set((state) => {
+        const newConfigs = new Map(state.configs);
+        newConfigs.set(agentId, latestFromDb as AgentConfiguration);
+        return { configs: newConfigs };
+      });
+      return latestFromDb;
     }
 
     // 从数据库获取或创建

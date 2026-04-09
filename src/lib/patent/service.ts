@@ -9,9 +9,11 @@ import type {
   RankedItem,
 } from "./types";
 import { patentsViewProvider } from "./providers/patentsview";
+import { serpApiGooglePatentsProvider } from "./providers/serpapi-google-patents";
 
 const providers: Record<string, PatentProvider> = {
-  patentsview: patentsViewProvider,
+  "patentsview": patentsViewProvider,
+  "serpapi-google-patents": serpApiGooglePatentsProvider,
 };
 
 function ensureProvider(runtimeConfig: PatentRuntimeConfig): PatentProvider {

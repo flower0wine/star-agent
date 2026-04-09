@@ -8,8 +8,9 @@ import dayjs from "dayjs";
 // Types
 // ============================================================================
 
-export type PatentApiProvider = "patentsview" | "epo-ops" | "uspto-assignment";
+export type PatentApiProvider = "patentsview" | "serpapi-google-patents" | "epo-ops" | "uspto-assignment";
 export type PatentSortBy = "date" | "citations";
+export type SerpApiDedupeMode = "family" | "publication";
 
 export interface PatentAgentStaticConfig {
   provider: PatentApiProvider;
@@ -22,6 +23,10 @@ export interface PatentAgentStaticConfig {
 export interface PatentAgentCustomParams {
   patentsViewApiKey?: string;
   patentsViewBaseUrl?: string;
+  serpApiKey?: string;
+  serpApiBaseUrl?: string;
+  serpApiDedupeMode?: SerpApiDedupeMode;
+  serpApiIncludeScholar?: boolean;
   epoConsumerKey?: string;
   epoConsumerSecret?: string;
   usptoApiKey?: string;
@@ -32,6 +37,12 @@ export interface PatentRuntimeConfig {
   patentsView: {
     apiKey?: string;
     baseUrl: string;
+  };
+  serpApi: {
+    apiKey?: string;
+    baseUrl: string;
+    dedupeMode: SerpApiDedupeMode;
+    includeScholar: boolean;
   };
   epoOps: {
     consumerKey?: string;
@@ -74,6 +85,11 @@ export const PATENT_PROVIDER_OPTIONS: Array<{
     description: "免费开放，支持结构化检索；需配置 X-Api-Key",
   },
   {
+    value: "serpapi-google-patents",
+    label: "SerpApi Google Patents",
+    description: "基于 Google Patents 数据，需配置 SerpApi API Key（按调用计费）",
+  },
+  {
     value: "epo-ops",
     label: "EPO OPS (欧洲专利)",
     description: "免费额度 + OAuth2，需 Consumer Key/Secret",
@@ -104,6 +120,11 @@ export const PATENT_SORT_OPTIONS: Array<{ value: PatentSortBy; label: string }> 
   { value: "citations", label: "按被引次数" },
 ];
 
+export const PATENT_SERPAPI_DEDUPE_OPTIONS: Array<{ value: SerpApiDedupeMode; label: string }> = [
+  { value: "family", label: "Family（同族去重）" },
+  { value: "publication", label: "Publication（按公开文本去重）" },
+];
+
 function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
   const num = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(num)) {
@@ -121,13 +142,39 @@ function readString(value: unknown): string | undefined {
 }
 
 function readProvider(value: unknown): PatentApiProvider {
-  return value === "epo-ops" || value === "uspto-assignment" || value === "patentsview"
+  if (value === "serpapi") {
+    return "serpapi-google-patents";
+  }
+
+  return value === "epo-ops"
+    || value === "uspto-assignment"
+    || value === "patentsview"
+    || value === "serpapi-google-patents"
     ? value
     : DEFAULT_PATENT_STATIC_CONFIG.provider;
 }
 
 function readSortBy(value: unknown): PatentSortBy {
   return value === "citations" || value === "date" ? value : DEFAULT_PATENT_STATIC_CONFIG.defaultSortBy;
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") {
+      return true;
+    }
+    if (value.toLowerCase() === "false") {
+      return false;
+    }
+  }
+  return fallback;
+}
+
+function readSerpApiDedupeMode(value: unknown): SerpApiDedupeMode {
+  return value === "publication" || value === "family" ? value : "family";
 }
 
 export function resolvePatentRuntimeConfig(
@@ -137,7 +184,13 @@ export function resolvePatentRuntimeConfig(
   const typedCustom = (customParams || {}) as PatentAgentCustomParams;
   const typedStatic = staticParams || {};
 
-  const provider = readProvider(typedStatic.provider);
+  const patentsViewApiKey = readString(typedCustom.patentsViewApiKey);
+  const serpApiKey = readString(typedCustom.serpApiKey) || readString(process.env.SERPAPI_API_KEY);
+  let provider = readProvider(typedStatic.provider);
+  if (provider === "patentsview" && !patentsViewApiKey && serpApiKey) {
+    // Fallback to SerpApi when user has configured only SerpApi key.
+    provider = "serpapi-google-patents";
+  }
   const defaultLookbackMonths = clampInteger(
     typedStatic.defaultLookbackMonths,
     DEFAULT_PATENT_STATIC_CONFIG.defaultLookbackMonths,
@@ -161,8 +214,14 @@ export function resolvePatentRuntimeConfig(
   return {
     provider,
     patentsView: {
-      apiKey: readString(typedCustom.patentsViewApiKey),
+      apiKey: patentsViewApiKey,
       baseUrl: readString(typedCustom.patentsViewBaseUrl) || "https://search.patentsview.org/api/v1",
+    },
+    serpApi: {
+      apiKey: serpApiKey,
+      baseUrl: readString(typedCustom.serpApiBaseUrl) || "https://serpapi.com/search.json",
+      dedupeMode: readSerpApiDedupeMode(typedCustom.serpApiDedupeMode),
+      includeScholar: readBoolean(typedCustom.serpApiIncludeScholar, false),
     },
     epoOps: {
       consumerKey: readString(typedCustom.epoConsumerKey),

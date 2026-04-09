@@ -24,6 +24,7 @@ import {
   PATENT_LOOKBACK_OPTIONS,
   PATENT_MAX_RESULTS_OPTIONS,
   PATENT_PROVIDER_OPTIONS,
+  PATENT_SERPAPI_DEDUPE_OPTIONS,
   PATENT_SORT_OPTIONS,
 } from "@/agents/patent/static-config";
 import type {
@@ -31,6 +32,7 @@ import type {
   PatentAgentStaticConfig,
   PatentApiProvider,
   PatentSortBy,
+  SerpApiDedupeMode,
 } from "@/agents/patent/static-config";
 import type { SubAgentProfile } from "@/lib/agents/sub-agent/types";
 import { parseSubAgentProfiles } from "@/lib/agents/sub-agent/profile-schema";
@@ -315,7 +317,7 @@ interface PatentApiConfigCardProps {
   staticConfig: PatentAgentStaticConfig;
   customParams: Record<string, unknown>;
   onStaticConfigChange: (updates: Partial<PatentAgentStaticConfig>) => Promise<void>;
-  onCustomParamChange: (key: keyof PatentAgentCustomParams, value: string) => Promise<void>;
+  onCustomParamChange: (key: keyof PatentAgentCustomParams, value: string | boolean) => Promise<void>;
 }
 
 function PatentApiConfigCard({
@@ -453,6 +455,60 @@ function PatentApiConfigCard({
                 id="patentsview-base-url"
                 value={typedCustom.patentsViewBaseUrl || "https://search.patentsview.org/api/v1"}
                 onChange={(event) => void onCustomParamChange("patentsViewBaseUrl", event.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {staticConfig.provider === "serpapi-google-patents" && (
+          <div className="space-y-3 rounded-xl border bg-muted/25 p-3">
+            <Badge variant="outline">SerpApi Google Patents</Badge>
+            <div className="space-y-2">
+              <Label htmlFor="serpapi-key">API Key</Label>
+              <Input
+                id="serpapi-key"
+                type="password"
+                value={typedCustom.serpApiKey || ""}
+                onChange={(event) => void onCustomParamChange("serpApiKey", event.target.value)}
+                placeholder="输入 SerpApi API Key"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="serpapi-base-url">Base URL</Label>
+              <Input
+                id="serpapi-base-url"
+                value={typedCustom.serpApiBaseUrl || "https://serpapi.com/search.json"}
+                onChange={(event) => void onCustomParamChange("serpApiBaseUrl", event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="serpapi-dupe-mode">去重策略</Label>
+              <Select
+                value={typedCustom.serpApiDedupeMode || "family"}
+                onValueChange={(value) =>
+                  void onCustomParamChange("serpApiDedupeMode", value as SerpApiDedupeMode)}
+              >
+                <SelectTrigger id="serpapi-dupe-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PATENT_SERPAPI_DEDUPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border bg-background/50 p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="serpapi-include-scholar">包含 Scholar 结果</Label>
+                <p className="text-xs text-muted-foreground">默认关闭，仅返回专利结果以减少噪音</p>
+              </div>
+              <Switch
+                id="serpapi-include-scholar"
+                checked={typedCustom.serpApiIncludeScholar === true}
+                onCheckedChange={(checked) => void onCustomParamChange("serpApiIncludeScholar", checked)}
               />
             </div>
           </div>
@@ -699,7 +755,7 @@ export function AgentSettings({
 
   const handlePatentCustomParamChange = async (
     key: keyof PatentAgentCustomParams,
-    value: string
+    value: string | boolean
   ) => {
     const currentParams = patentConfigState.config?.dynamicConfig.customParams || {};
     await patentConfigState.updateDynamicConfig({

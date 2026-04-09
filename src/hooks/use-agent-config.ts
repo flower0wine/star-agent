@@ -60,6 +60,7 @@ export function useAgentConfig<TStatic = Record<string, unknown>>({
 }: UseAgentConfigOptions<TStatic>): UseAgentConfigReturn<TStatic> {
   const [config, setConfig] = useState<AgentConfiguration<TStatic> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const liveConfig = useAgentConfigStore((state) => state.configs.get(agentId) as AgentConfiguration<TStatic> | undefined);
 
   const {
     getConfig,
@@ -89,6 +90,37 @@ export function useAgentConfig<TStatic = Record<string, unknown>>({
 
     void loadConfig();
   }, [agentId, defaultStaticConfig, getConfig, initialize, isInitialized]);
+
+  useEffect(() => {
+    const refreshFromStorage = async () => {
+      const latest = await getConfig(agentId, defaultStaticConfig);
+      setConfig(latest);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshFromStorage();
+      }
+    };
+    const handleWindowFocus = () => {
+      void refreshFromStorage();
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [agentId, defaultStaticConfig, getConfig]);
+
+  // 同步其他页面/组件对同一 Agent 配置的修改，避免使用过期配置。
+  useEffect(() => {
+    if (!liveConfig) {
+      return;
+    }
+    setConfig(liveConfig);
+  }, [liveConfig]);
 
   // 更新静态配置
   const updateStaticConfig = useCallback(

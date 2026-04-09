@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
@@ -85,23 +85,6 @@ export function useAgentChat({
   conversationId = null,
   username = null,
 }: UseAgentChatOptions = {}) {
-  const contextRef = useRef(context);
-  const agentConfigRef = useRef(agentConfig);
-  const modelConfigRef = useRef(modelConfig);
-
-  // Always keep context ref updated
-  useEffect(() => {
-    contextRef.current = context;
-  }, [context]);
-
-  useEffect(() => {
-    agentConfigRef.current = agentConfig;
-  }, [agentConfig]);
-
-  useEffect(() => {
-    modelConfigRef.current = modelConfig;
-  }, [modelConfig]);
-
   const chat = useChat<AgentChatMessage>({
     id: `chat-${agentId}-${conversationId || "new"}`,
     transport: new DefaultChatTransport({
@@ -133,12 +116,12 @@ export function useAgentChat({
     await chat.sendMessage(message, {
       body: {
         agentId,
-        context: contextRef.current,
-        agentConfig: agentConfigRef.current,
-        modelConfig: modelConfigRef.current,
+        context,
+        agentConfig,
+        modelConfig,
       },
     });
-  }, [chat, agentId, ensureConversation]);
+  }, [chat, agentId, ensureConversation, context, agentConfig, modelConfig]);
 
   return {
     ...chat,
