@@ -68,6 +68,10 @@ export async function POST(request: NextRequest) {
                   text: event.text,
                   partType: event.partType,
                 });
+              } else if (event.type === "commit") {
+                writeEvent("commit", {
+                  message: event.message,
+                });
               } else if (event.type === "done") {
                 writeEvent("done", event.payload);
               }

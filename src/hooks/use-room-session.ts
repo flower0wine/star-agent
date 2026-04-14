@@ -67,6 +67,22 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
     return Math.max(...messages.map(message => message.turnNo)) + 1;
   }, [messages]);
 
+  const mergeMessagesById = useCallback((base: SharedMessage[], incoming: SharedMessage[]) => {
+    if (incoming.length === 0) {
+      return base;
+    }
+    const next = [...base];
+    for (const message of incoming) {
+      const index = next.findIndex(item => item.id === message.id);
+      if (index >= 0) {
+        next[index] = message;
+      } else {
+        next.push(message);
+      }
+    }
+    return next;
+  }, []);
+
   useEffect(() => {
     let disposed = false;
 
@@ -262,6 +278,16 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
           return;
         }
 
+        if (type === "commit") {
+          const commitPayload = JSON.parse(dataRaw) as { message?: SharedMessage };
+          if (!commitPayload.message) {
+            return;
+          }
+          setMessages(prev => mergeMessagesById(prev, [commitPayload.message!]));
+          setStreamingMessage(null);
+          return;
+        }
+
         if (type === "error") {
           const errorPayload = JSON.parse(dataRaw) as { error?: string };
           throw new Error(errorPayload.error || "SSE 执行失败");
@@ -319,7 +345,7 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
       await appendRoomMessages(persistedMessages);
       await upsertRoomTurnState(resolvedPayload.turnState);
 
-      setMessages(prev => [...prev, ...persistedMessages]);
+      setMessages(prev => mergeMessagesById(prev, persistedMessages));
       setTurnState(resolvedPayload.turnState);
       setStreamingMessage(null);
 
@@ -339,7 +365,7 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, messages, modelConfig, roomConfig, roomId, turnState]);
+  }, [isRunning, mergeMessagesById, messages, modelConfig, roomConfig, roomId, turnState]);
 
   return {
     isReady,

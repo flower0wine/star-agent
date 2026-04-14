@@ -290,65 +290,6 @@ function resolveStreamChunkDelta(
   return nextDelta;
 }
 
-async function buildPlaywrightDirection(input: {
-  requestId: string;
-  model: any;
-  roomConfig: RoomConfig;
-  characterId: string;
-  characterName: string;
-  conversationText: string;
-}): Promise<{ direction: string; roomConfig: RoomConfig }> {
-  const prompt = [
-    "你是幕后编剧，请只为当前角色生成本轮导演指令。",
-    "必要时你可以调用 createCharacter 工具创建新角色来补齐剧情结构。",
-    "你必须遵循用户创作指令。",
-    "",
-    "用户创作指令：",
-    formatClientBrief(input.roomConfig),
-    "",
-    `当前角色: ${input.characterName} (${input.characterId})`,
-    "请输出 3-5 行短指令，包含：目标、冲突、语气、下一步动作。",
-    "禁止输出 JSON，禁止解释规则，只输出可执行导演指令。",
-    "",
-    "当前对话：",
-    input.conversationText || "（暂无历史）",
-  ].join("\n");
-
-  const characterTools = createPlaywrightCharacterTools({
-    roomConfig: input.roomConfig,
-    requestId: input.requestId,
-    roomId: input.roomConfig.roomId,
-  });
-
-  const result = await observedGenerateText({
-    model: input.model,
-    system: input.roomConfig.playwright.systemPromptTemplate,
-    prompt,
-    tools: characterTools.tools,
-  }, {
-    functionId: "room.character.direction",
-    requestId: input.requestId,
-    agentId: "playwright",
-    metadata: {
-      roomId: input.roomConfig.roomId,
-      characterId: input.characterId,
-      characterName: input.characterName,
-    },
-  });
-
-  const text = result.text.trim();
-  if (!text) {
-    return {
-      direction: "保持角色核心动机，推动冲突升级并给出明确行动。",
-      roomConfig: characterTools.getNextRoomConfig(),
-    };
-  }
-  return {
-    direction: text,
-    roomConfig: characterTools.getNextRoomConfig(),
-  };
-}
-
 function buildPlaywrightReplyPrompt(input: {
   roomConfig: RoomConfig;
   conversationText: string;
@@ -446,7 +387,12 @@ interface RoomDoneEvent {
   payload: RoomGenerationResponse;
 }
 
-export type RoomStreamEvent = RoomStartEvent | RoomDeltaEvent | RoomDoneEvent;
+interface RoomCommitEvent {
+  type: "commit";
+  message: RoomGenerationResponse["message"];
+}
+
+export type RoomStreamEvent = RoomStartEvent | RoomDeltaEvent | RoomCommitEvent | RoomDoneEvent;
 
 export async function* runRoomGenerationStream(
   input: RoomGenerationRequest,
@@ -710,16 +656,136 @@ export async function* runRoomGenerationStream(
   }
 
   const nextSpeaker = resolveNextSpeaker(roomConfig.characters, turnState);
-  const playwrightDirectionResult = await buildPlaywrightDirection({
-    requestId,
-    model: modelInstance.model,
+  const directionPrompt = [
+    "你是幕后编剧，请只为当前角色生成本轮导演指令。",
+    "必要时你可以调用 createCharacter 工具创建新角色来补齐剧情结构。",
+    "你必须遵循用户创作指令。",
+    "",
+    "用户创作指令：",
+    formatClientBrief(roomConfig),
+    "",
+    `当前角色: ${nextSpeaker.name} (${nextSpeaker.id})`,
+    "请输出 3-5 行短指令，包含：目标、冲突、语气、下一步动作。",
+    "禁止输出 JSON，禁止解释规则，只输出可执行导演指令。",
+    "",
+    "当前对话：",
+    conversationText || "（暂无历史）",
+  ].join("\n");
+  const characterTools = createPlaywrightCharacterTools({
     roomConfig,
-    characterId: nextSpeaker.id,
-    characterName: nextSpeaker.name,
-    conversationText,
+    requestId,
+    roomId: input.roomId,
   });
-  const nextConfigFromTools = playwrightDirectionResult.roomConfig;
-  const playwrightDirection = playwrightDirectionResult.direction;
+
+  yield {
+    type: "start",
+    phase: "playwright",
+    actorType: "playwright",
+    actorId: roomConfig.playwright.id,
+    actorName: roomConfig.playwright.name,
+    turnNo,
+  };
+
+  const directionStream = observedStreamText({
+    model: modelInstance.model,
+    system: roomConfig.playwright.systemPromptTemplate,
+    prompt: directionPrompt,
+    tools: characterTools.tools,
+    providerOptions: modelInstance.supportsReasoning
+      ? { reasoningSummary: "detailed" as const } as any
+      : undefined,
+  }, {
+    functionId: "room.character.direction",
+    requestId,
+    agentId: "playwright",
+    metadata: {
+      roomId: input.roomId,
+      cycleNo: turnState.cycleNo,
+      characterId: nextSpeaker.id,
+      characterName: nextSpeaker.name,
+    },
+  });
+
+  const directionVisibleParts: Array<{ type: "text"; text: string }> = [];
+  const directionRenderParts: Array<{ type: "text" | "reasoning"; text: string }> = [];
+  const directionCursor: StreamPartCursor = {
+    text: "",
+    reasoning: "",
+  };
+
+  for await (const chunk of directionStream.fullStream) {
+    const typedChunk = chunk as { type?: string; delta?: string; text?: string };
+    if (!typedChunk?.type) {
+      continue;
+    }
+
+    if (typedChunk.type === "text-delta") {
+      const chunkText = resolveStreamChunkDelta(typedChunk, "text", directionCursor);
+      if (!chunkText) {
+        continue;
+      }
+      appendDeltaPart(directionRenderParts, "text", chunkText);
+      const lastVisible = directionVisibleParts.at(-1);
+      if (lastVisible) {
+        lastVisible.text += chunkText;
+      } else {
+        directionVisibleParts.push({ type: "text", text: chunkText });
+      }
+      yield {
+        type: "delta",
+        partType: "text",
+        text: chunkText,
+      };
+      continue;
+    }
+
+    if (typedChunk.type === "reasoning-delta") {
+      const chunkText = resolveStreamChunkDelta(typedChunk, "reasoning", directionCursor);
+      if (!chunkText) {
+        continue;
+      }
+      appendDeltaPart(directionRenderParts, "reasoning", chunkText);
+      yield {
+        type: "delta",
+        partType: "reasoning",
+        text: chunkText,
+      };
+    }
+  }
+
+  const playwrightDirection = directionVisibleParts.map(part => part.text).join("").trim()
+    || "保持角色核心动机，推动冲突升级并给出明确行动。";
+
+  const directionMessage = createTextSharedMessage({
+    id: `room-msg-${crypto.randomUUID()}`,
+    roomId: input.roomId,
+    turnNo,
+    actorType: "playwright",
+    actorId: roomConfig.playwright.id,
+    actorName: roomConfig.playwright.name,
+    text: `导演提示（${nextSpeaker.name}）：\n${playwrightDirection}`,
+    createdAt: nowIso,
+    metadata: {
+      messageKind: "playwright-direction",
+    },
+  });
+  if (directionVisibleParts.length > 0) {
+    directionMessage.visibleParts = directionVisibleParts
+      .map(part => ({ ...part, text: part.text.trim() }))
+      .filter(part => part.text.length > 0);
+  }
+  if (directionRenderParts.length > 0) {
+    directionMessage.renderParts = directionRenderParts
+      .map(part => ({ ...part, text: part.text.trim() }))
+      .filter(part => part.text.length > 0);
+  }
+
+  yield {
+    type: "commit",
+    message: directionMessage,
+  };
+
+  const nextConfigFromTools = characterTools.getNextRoomConfig();
 
   yield {
     type: "start",
@@ -727,7 +793,7 @@ export async function* runRoomGenerationStream(
     actorType: "character",
     actorId: nextSpeaker.id,
     actorName: nextSpeaker.name,
-    turnNo,
+    turnNo: turnNo + 1,
   };
 
   const characterStream = observedStreamText({
@@ -828,20 +894,6 @@ export async function* runRoomGenerationStream(
       .map(part => ({ ...part, text: part.text.trim() }))
       .filter(part => part.text.length > 0);
   }
-
-  const directionMessage = createTextSharedMessage({
-    id: `room-msg-${crypto.randomUUID()}`,
-    roomId: input.roomId,
-    turnNo,
-    actorType: "playwright",
-    actorId: roomConfig.playwright.id,
-    actorName: roomConfig.playwright.name,
-    text: `导演提示（${nextSpeaker.name}）：\n${playwrightDirection}`,
-    createdAt: nowIso,
-    metadata: {
-      messageKind: "playwright-direction",
-    },
-  });
 
   yield {
     type: "done",
