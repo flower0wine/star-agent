@@ -28,7 +28,7 @@ function messageToRecord(message: SharedMessage): RoomMessageRecord {
     actorId: message.actorId,
     actorName: message.actorName,
     visibleParts: message.visibleParts,
-    renderParts: message.renderParts,
+    renderParts: message.renderParts as unknown[] | undefined,
     metadata: message.metadata,
     createdAt: dayjs(message.createdAt).valueOf(),
   };
@@ -43,7 +43,7 @@ function recordToMessage(record: RoomMessageRecord): SharedMessage {
     actorId: record.actorId,
     actorName: record.actorName,
     visibleParts: record.visibleParts,
-    renderParts: record.renderParts,
+    renderParts: record.renderParts as SharedMessage["renderParts"],
     metadata: record.metadata,
     createdAt: dayjs(record.createdAt).toISOString(),
   };
@@ -202,7 +202,16 @@ export async function getRoomTurnState(roomId: string): Promise<RoomTurnState> {
   const existing = await db.get("roomTurnStates", roomId);
 
   if (existing?.state) {
-    return existing.state as RoomTurnState;
+    const state = existing.state as Partial<RoomTurnState>;
+    return {
+      roomId,
+      cycleNo: state.cycleNo ?? 1,
+      totalCharacterTurnsInCycle: state.totalCharacterTurnsInCycle ?? 0,
+      lastSpeakerCharacterId: state.lastSpeakerCharacterId,
+      cycleArmed: state.cycleArmed ?? false,
+      nextPhase: state.nextPhase ?? "playwright",
+      updatedAt: state.updatedAt ?? Date.now(),
+    };
   }
 
   const fallback = createDefaultRoomTurnState(roomId);

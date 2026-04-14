@@ -55,3 +55,30 @@ export interface SearchPatentsOutput {
   timeRange?: SearchPatentsTimeRange;
   patents?: PatentItem[];
 }
+
+export interface CreateCharacterToolInput {
+  name?: string;
+  personalityTraits?: string[];
+  coreValues?: string[];
+  distinctiveTraits?: string[];
+  speakingStyle?: string;
+  motivation?: string;
+  worldview?: string;
+  conflictLine?: string;
+}
+
+export interface CreateCharacterToolOutput {
+  status?: "created" | "rejected";
+  message?: string;
+  characterId?: string;
+  characterName?: string;
+  __duration?: number;
+}
+
+export interface StartRoleCycleToolOutput {
+  status?: "started" | "rejected";
+  message?: string;
+  cycleNo?: number;
+  nextPhase?: string;
+  __duration?: number;
+}

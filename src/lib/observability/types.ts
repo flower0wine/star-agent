@@ -6,6 +6,7 @@ export type TelemetryFunctionId
     | "chat.master.stream"
     | "chat.master.resume"
     | "chat.subagent.run"
+    | "room.playwright.bootstrap"
     | "room.character.direction"
     | "room.character.stream"
     | "room.playwright.reply"
@@ -16,6 +17,7 @@ export interface TelemetryBuildContext {
   functionId: TelemetryFunctionId;
   requestId: string;
   agentId: string;
+  sessionId?: string;
   metadata?: Record<string, unknown>;
 }
 

@@ -25,6 +25,11 @@ export function RoomCharacterPanel({ roomConfig }: RoomCharacterPanelProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 pt-4">
+        {sortedCharacters.length === 0 && (
+          <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+            编剧尚未创建角色。启动后编剧会先建立世界观并生成角色模板。
+          </div>
+        )}
         {sortedCharacters.map(character => (
           <Collapsible
             key={character.id}

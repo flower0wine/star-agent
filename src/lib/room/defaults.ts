@@ -3,22 +3,13 @@ import { nanoid } from "nanoid";
 import { DEFAULT_PLAYWRIGHT_NAME } from "./constants";
 import type { RoomConfig, RoomTurnState } from "./types";
 
-function defaultCharacterPrompt(name: string): string {
-  return [
-    `你是角色 ${name}。`,
-    "保持鲜明个性和稳定价值观。",
-    "你的表达应当推动剧情冲突与情节发展，而不是平铺直叙。",
-    "避免重复前文句式，保持语言节奏变化。",
-  ].join("\n");
-}
-
 export function createDefaultRoomConfig(roomId: string): RoomConfig {
   const now = Date.now();
 
   return {
     roomId,
     name: `交流室 ${dayjs(now).format("MM-DD HH:mm")}`,
-    userDirective: "故事类型、核心价值观、禁忌项、希望的剧情方向。",
+    userDirective: "题材：悬疑奇幻；价值观：责任与自由并行；禁忌：避免脸谱化反派；期待：多线冲突与高张力反转。",
     playwright: {
       id: "playwright",
       name: DEFAULT_PLAYWRIGHT_NAME,
@@ -28,35 +19,10 @@ export function createDefaultRoomConfig(roomId: string): RoomConfig {
       ].join("\n"),
     },
     world: {
-      worldPromptTemplate: [
-        "世界处于资源稀缺与秩序重建阶段。",
-        "不同阵营在理念与利益上持续碰撞，任何选择都有代价。",
-      ].join("\n"),
-      playwrightOutput: "编剧尚未生成完整的世界观与情节方案。",
+      worldPromptTemplate: "",
+      playwrightOutput: "",
     },
-    characters: [
-      {
-        id: "character-1",
-        name: "执火者",
-        enabled: true,
-        order: 1,
-        systemPromptTemplate: defaultCharacterPrompt("执火者"),
-      },
-      {
-        id: "character-2",
-        name: "巡夜人",
-        enabled: true,
-        order: 2,
-        systemPromptTemplate: defaultCharacterPrompt("巡夜人"),
-      },
-      {
-        id: "character-3",
-        name: "织忆师",
-        enabled: true,
-        order: 3,
-        systemPromptTemplate: defaultCharacterPrompt("织忆师"),
-      },
-    ],
+    characters: [],
     updatedAt: now,
   };
 }
@@ -67,7 +33,8 @@ export function createDefaultRoomTurnState(roomId: string): RoomTurnState {
     cycleNo: 1,
     totalCharacterTurnsInCycle: 0,
     lastSpeakerCharacterId: undefined,
-    nextPhase: "character",
+    cycleArmed: false,
+    nextPhase: "playwright",
     updatedAt: Date.now(),
   };
 }

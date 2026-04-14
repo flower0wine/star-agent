@@ -56,6 +56,7 @@ export function RoomChatMessageList({ messages }: RoomChatMessageListProps) {
                     assistantDisplayName={raw.actorType === "user" ? undefined : raw.actorName}
                     messageMetaText={formatRoomMessageMeta(raw)}
                     contentClassName={cn(getMessageContentClass(raw.actorType))}
+                    showToolbar={false}
                   />
                 </ChatMessageWrapper>
               ))}

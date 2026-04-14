@@ -30,6 +30,8 @@ import {
 import {
   DisplayRepositoriesToolPart,
   SearchPatentsToolPart,
+  CreateCharacterToolPart,
+  StartRoleCycleToolPart,
 } from "./tool-parts";
 import {
   UserIcon,
@@ -339,6 +341,26 @@ export const MessageRenderer = memo(({
             key={`tool-searchPatents-${i}`}
             part={part}
             itemKey={`tool-searchPatents-${i}`}
+          />
+        );
+      }
+
+      if (partType === "tool-createCharacter") {
+        return (
+          <CreateCharacterToolPart
+            key={`tool-createCharacter-${i}`}
+            part={part as any}
+            itemKey={`tool-createCharacter-${i}`}
+          />
+        );
+      }
+
+      if (partType === "tool-startRoleCycle") {
+        return (
+          <StartRoleCycleToolPart
+            key={`tool-startRoleCycle-${i}`}
+            part={part as any}
+            itemKey={`tool-startRoleCycle-${i}`}
           />
         );
       }

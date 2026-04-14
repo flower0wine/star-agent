@@ -44,9 +44,24 @@ function isObservabilityEnabled(): boolean {
   return true;
 }
 
-function shouldSample(): boolean {
+function hashToUnitInterval(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
+
+function shouldSample(samplingKey: string): boolean {
   const sampleRate = parseSampleRate();
-  return Math.random() < sampleRate;
+  if (sampleRate >= 1) {
+    return true;
+  }
+  if (sampleRate <= 0) {
+    return false;
+  }
+  return hashToUnitInterval(samplingKey) < sampleRate;
 }
 
 function normalizeMetadata(
@@ -73,7 +88,8 @@ function normalizeMetadata(
 }
 
 export function buildTelemetrySettings(context: TelemetryBuildContext): TelemetryBuildResult {
-  if (!isObservabilityEnabled() || !shouldSample()) {
+  const samplingKey = context.sessionId ?? context.requestId;
+  if (!isObservabilityEnabled() || !shouldSample(samplingKey)) {
     return undefined;
   }
 
@@ -86,7 +102,7 @@ export function buildTelemetrySettings(context: TelemetryBuildContext): Telemetr
       requestId: context.requestId,
       agentId: context.agentId,
       environment,
-      sessionId: context.requestId,
+      sessionId: context.sessionId ?? context.requestId,
     },
     context.metadata,
   );

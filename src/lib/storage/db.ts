@@ -118,10 +118,7 @@ export interface RoomMessageRecord {
     type: "text" | "tool-summary";
     text: string;
   }>;
-  renderParts?: Array<{
-    type: "text" | "reasoning" | "tool-summary";
-    text: string;
-  }>;
+  renderParts?: unknown[];
   metadata?: Record<string, unknown>;
   createdAt: number;
 }

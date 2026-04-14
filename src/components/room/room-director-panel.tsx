@@ -45,6 +45,7 @@ export function RoomDirectorPanel({ roomConfig, onUpdate }: RoomDirectorPanelPro
             id="playwright-output"
             rows={12}
             value={roomConfig.world.playwrightOutput}
+            placeholder="点击开始后，编剧会先生成世界观并创建角色设定。"
             readOnly
             className="mt-2 bg-background/70"
           />

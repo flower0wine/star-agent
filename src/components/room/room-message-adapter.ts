@@ -17,17 +17,37 @@ function toTextUIPart(part: SharedMessagePart): { type: "text"; text: string } {
 }
 
 function toRenderUIPart(part: SharedMessageRenderPart) {
+  if (part.type === "tool-createCharacter") {
+    return {
+      type: "tool-createCharacter",
+      state: part.state || "output-available",
+      input: part.input,
+      output: part.output,
+      errorText: part.errorText,
+    } as const;
+  }
+
+  if (part.type === "tool-startRoleCycle") {
+    return {
+      type: "tool-startRoleCycle",
+      state: part.state || "output-available",
+      input: part.input,
+      output: part.output,
+      errorText: part.errorText,
+    } as const;
+  }
+
   if (part.type === "reasoning") {
     return {
       type: "reasoning" as const,
-      text: part.text,
+      text: part.text || "",
       state: "done" as const,
     };
   }
 
   return {
     type: "text" as const,
-    text: part.text,
+    text: part.text || "",
   };
 }
 
@@ -39,7 +59,7 @@ export function toRoomRenderableMessage(message: SharedMessage): RoomRenderableM
   return {
     id: message.id,
     role: message.actorType === "user" ? "user" : "assistant",
-    parts: renderParts,
+    parts: renderParts as any,
   };
 }
 

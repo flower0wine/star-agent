@@ -8,8 +8,12 @@ export interface SharedMessagePart {
 }
 
 export interface SharedMessageRenderPart {
-  type: "text" | "reasoning" | "tool-summary";
-  text: string;
+  type: "text" | "reasoning" | "tool-summary" | "tool-createCharacter" | "tool-startRoleCycle";
+  text?: string;
+  state?: "input-streaming" | "output-available" | "output-error";
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  errorText?: string;
 }
 
 export interface SharedMessage {
@@ -25,7 +29,7 @@ export interface SharedMessage {
   metadata?: {
     sourceMessageId?: string;
     generationCycle?: number;
-    messageKind?: "user-input" | "playwright-reply" | "playwright-direction" | "playwright-cycle-review" | "character-dialogue";
+    messageKind?: "user-input" | "playwright-bootstrap" | "playwright-control" | "playwright-reply" | "playwright-direction" | "playwright-cycle-review" | "character-dialogue";
   };
 }
 
@@ -63,6 +67,7 @@ export interface RoomTurnState {
   cycleNo: number;
   totalCharacterTurnsInCycle: number;
   lastSpeakerCharacterId?: string;
+  cycleArmed: boolean;
   nextPhase: "character" | "playwright";
   updatedAt: number;
 }

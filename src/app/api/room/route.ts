@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { context, trace, SpanStatusCode } from "@opentelemetry/api";
 import type { RoomGenerationRequest } from "@/lib/room/types";
 import { runRoomGenerationStream } from "@/lib/room/runtime/room-engine";
 import {
@@ -9,6 +10,7 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const roomTracer = trace.getTracer("room-api");
 
 function isRoomGenerationRequest(payload: unknown): payload is RoomGenerationRequest {
   if (!payload || typeof payload !== "object") {
@@ -56,31 +58,48 @@ export async function POST(request: NextRequest) {
         };
 
         const execute = async () => {
+          const roomTraceName = `room:${body.roomId}:request:${requestId}`;
+          const span = roomTracer.startSpan("room.generation.run", {
+            attributes: {
+              "room.id": body.roomId,
+              "request.id": requestId,
+              "langfuse.session.id": `room:${body.roomId}`,
+              "langfuse.trace.name": roomTraceName,
+            },
+          });
           try {
-            for await (const event of runRoomGenerationStream({
-              ...body,
-              requestId,
-            })) {
-              if (event.type === "start") {
-                writeEvent("start", event);
-              } else if (event.type === "delta") {
-                writeEvent("delta", {
-                  text: event.text,
-                  partType: event.partType,
-                });
-              } else if (event.type === "commit") {
-                writeEvent("commit", {
-                  message: event.message,
-                });
-              } else if (event.type === "done") {
-                writeEvent("done", event.payload);
+            await context.with(trace.setSpan(context.active(), span), async () => {
+              for await (const event of runRoomGenerationStream({
+                ...body,
+                requestId,
+              })) {
+                if (event.type === "start") {
+                  writeEvent("start", event);
+                } else if (event.type === "delta") {
+                  writeEvent("delta", {
+                    text: event.text,
+                    partType: event.partType,
+                  });
+                } else if (event.type === "commit") {
+                  writeEvent("commit", {
+                    message: event.message,
+                  });
+                } else if (event.type === "done") {
+                  writeEvent("done", event.payload);
+                }
               }
-            }
+            });
           } catch (streamError) {
+            span.recordException(streamError instanceof Error ? streamError : new Error(String(streamError)));
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: streamError instanceof Error ? streamError.message : "Room stream failed",
+            });
             writeEvent("error", {
               error: streamError instanceof Error ? streamError.message : "Room stream failed",
             });
           } finally {
+            span.end();
             releaseRoomLock(roomIdForLock);
             controller.close();
           }
