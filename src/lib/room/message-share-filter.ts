@@ -69,6 +69,7 @@ export function filterToSharedMessage(input: MessageShareFilterInput): SharedMes
     actorId: input.actorId,
     actorName: input.actorName,
     visibleParts,
+    renderParts: [...visibleParts],
     createdAt: input.createdAt,
     metadata: {
       sourceMessageId: input.message.id,
@@ -85,6 +86,7 @@ export function createTextSharedMessage(input: {
   text: string;
   createdAt: string;
   id: string;
+  metadata?: SharedMessage["metadata"];
 }): SharedMessage {
   return {
     id: input.id,
@@ -94,9 +96,11 @@ export function createTextSharedMessage(input: {
     actorId: input.actorId,
     actorName: input.actorName,
     visibleParts: [{ type: "text", text: input.text.trim() }],
+    renderParts: [{ type: "text", text: input.text.trim() }],
     createdAt: input.createdAt,
     metadata: {
       sourceMessageId: input.id,
+      ...input.metadata,
     },
   };
 }

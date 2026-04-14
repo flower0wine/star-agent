@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import {
+  appendRoomMessages,
   appendRoomMessage,
   ensureRoom,
   getRoomConfig,
@@ -122,6 +123,9 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
       actorName: "用户",
       text: trimmed,
       createdAt: dayjs().toISOString(),
+      metadata: {
+        messageKind: "user-input",
+      },
     });
 
     await appendRoomMessage(message);
@@ -189,14 +193,16 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
             actorId: start.actorId,
             actorName: start.actorName,
             visibleParts: [{ type: "text", text: "" }],
+            renderParts: [{ type: "text", text: "" }],
             createdAt: dayjs().toISOString(),
           });
           return;
         }
 
         if (type === "delta") {
-          const delta = JSON.parse(dataRaw) as { text?: string };
+          const delta = JSON.parse(dataRaw) as { text?: string; partType?: "text" | "reasoning" };
           const text = delta.text || "";
+          const partType = delta.partType || "text";
           if (!text) {
             return;
           }
@@ -204,10 +210,48 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
             if (!prev) {
               return prev;
             }
-            const currentText = prev.visibleParts[0]?.text || "";
+            const currentRenderParts = prev.renderParts || [];
+            const lastRenderPart = currentRenderParts.at(-1);
+            const nextRenderParts = lastRenderPart?.type === partType
+              ? [
+                  ...currentRenderParts.slice(0, -1),
+                  {
+                    ...lastRenderPart,
+                    text: `${lastRenderPart.text}${text}`,
+                  },
+                ]
+              : [
+                  ...currentRenderParts,
+                  {
+                    type: partType,
+                    text,
+                  },
+                ];
+
+            let nextVisibleParts = prev.visibleParts;
+            if (partType === "text") {
+              const lastVisiblePart = prev.visibleParts.at(-1);
+              nextVisibleParts = lastVisiblePart
+                ? [
+                    ...prev.visibleParts.slice(0, -1),
+                    {
+                      ...lastVisiblePart,
+                      text: `${lastVisiblePart.text}${text}`,
+                    },
+                  ]
+                : [
+                    ...prev.visibleParts,
+                    {
+                      type: "text",
+                      text,
+                    },
+                  ];
+            }
+
             return {
               ...prev,
-              visibleParts: [{ type: "text", text: `${currentText}${text}` }],
+              visibleParts: nextVisibleParts,
+              renderParts: nextRenderParts,
             };
           });
           return;
@@ -268,10 +312,14 @@ export function useRoomSession(options: UseRoomSessionOptions): UseRoomSessionRe
       }
       const resolvedPayload = donePayload;
 
-      await appendRoomMessage(resolvedPayload.message);
+      const persistedMessages = [
+        ...(resolvedPayload.extraMessages || []),
+        resolvedPayload.message,
+      ];
+      await appendRoomMessages(persistedMessages);
       await upsertRoomTurnState(resolvedPayload.turnState);
 
-      setMessages(prev => [...prev, resolvedPayload.message]);
+      setMessages(prev => [...prev, ...persistedMessages]);
       setTurnState(resolvedPayload.turnState);
       setStreamingMessage(null);
 

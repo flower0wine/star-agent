@@ -46,6 +46,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useCallback, useMemo, memo } from "react";
 import { ChatMessageMetrics } from "./metadata";
 import type { ChatMessageMetadata } from "@/lib/chat/message-metadata";
+import { cn } from "@/lib/utils";
 
 // Custom message type with usage metadata
 type ChatMessageWithUsage = UIMessage<ChatMessageMetadata>;
@@ -54,6 +55,11 @@ export interface MessageRendererProps {
   message: ChatMessageWithUsage;
   isStreaming?: boolean;
   isLastMessage?: boolean;
+  assistantDisplayName?: string;
+  messageMetaText?: string;
+  contentClassName?: string;
+  showToolbar?: boolean;
+  showMetrics?: boolean;
   onReload?: () => void;
   onOpenSubAgentPanel?: (payload: {
     taskId: string;
@@ -123,6 +129,11 @@ export const MessageRenderer = memo(({
   message,
   isStreaming = false,
   isLastMessage = false,
+  assistantDisplayName,
+  messageMetaText,
+  contentClassName,
+  showToolbar = true,
+  showMetrics = true,
   onReload,
   onOpenSubAgentPanel,
 }: MessageRendererProps) => {
@@ -308,6 +319,20 @@ export const MessageRenderer = memo(({
         );
       }
 
+      if (typeof part === "object" && part !== null && "type" in part) {
+        const summaryPart = part as { type?: unknown; text?: unknown };
+        if (summaryPart.type === "tool-summary") {
+          return (
+            <div
+              key={`tool-summary-${i}`}
+              className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-muted-foreground text-sm"
+            >
+              {typeof summaryPart.text === "string" ? summaryPart.text : ""}
+            </div>
+          );
+        }
+      }
+
       if (partType === "tool-searchPatents" && isStaticToolUIPart(part)) {
         return (
           <SearchPatentsToolPart
@@ -345,17 +370,28 @@ export const MessageRenderer = memo(({
 
       return null;
     });
-  }, [message.parts, isStreaming, isLastMessage]);
+  }, [message.parts, isStreaming, isLastMessage, onOpenSubAgentPanel]);
+
 
   return (
     <Message from={message.role}>
       {/* Render parts in original order */}
-      <MessageContent>
+      <MessageContent className={cn(contentClassName)}>
+        {(assistantDisplayName || messageMetaText) && (
+          <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
+            {assistantDisplayName && (
+              <span className="font-medium text-foreground/85">{assistantDisplayName}</span>
+            )}
+            {messageMetaText && (
+              <span>{messageMetaText}</span>
+            )}
+          </div>
+        )}
         <div className="space-y-3">{renderParts}</div>
       </MessageContent>
 
       {/* Message usage and timing */}
-      {message.role === "assistant" && !isStreaming && (
+      {message.role === "assistant" && !isStreaming && showMetrics && (
         <ChatMessageMetrics
           usage={message.metadata?.totalUsage}
           timing={message.metadata?.timing}
@@ -363,7 +399,7 @@ export const MessageRenderer = memo(({
       )}
 
       {/* Message toolbar for assistant messages */}
-      {message.role === "assistant" && !isStreaming && (
+      {message.role === "assistant" && !isStreaming && showToolbar && (
         <MessageToolbar>
           <MessageActions>
             <MessageAction

@@ -7,6 +7,11 @@ export interface SharedMessagePart {
   text: string;
 }
 
+export interface SharedMessageRenderPart {
+  type: "text" | "reasoning" | "tool-summary";
+  text: string;
+}
+
 export interface SharedMessage {
   id: string;
   roomId: string;
@@ -15,10 +20,12 @@ export interface SharedMessage {
   actorId: string;
   actorName: string;
   visibleParts: SharedMessagePart[];
+  renderParts?: SharedMessageRenderPart[];
   createdAt: string;
   metadata?: {
     sourceMessageId?: string;
     generationCycle?: number;
+    messageKind?: "user-input" | "playwright-reply" | "playwright-direction" | "playwright-cycle-review" | "character-dialogue";
   };
 }
 
@@ -38,8 +45,7 @@ export interface RoomPlaywrightProfile {
 
 export interface RoomWorldConfig {
   worldPromptTemplate: string;
-  storyBible: string;
-  plotOutline: string;
+  playwrightOutput: string;
 }
 
 export interface RoomConfig {
@@ -66,8 +72,7 @@ export interface RoomPromptRevision {
   roomId: string;
   cycleNo: number;
   worldPromptTemplate: string;
-  storyBible: string;
-  plotOutline: string;
+  playwrightOutput: string;
   characterPromptPatches: Array<{
     characterId: string;
     prompt: string;
@@ -92,6 +97,7 @@ export interface RoomGenerationRequest {
 export interface RoomGenerationResponse {
   phase: "character" | "playwright";
   message: SharedMessage;
+  extraMessages?: SharedMessage[];
   turnState: RoomTurnState;
   roomConfig?: RoomConfig;
   promptRevision?: RoomPromptRevision;

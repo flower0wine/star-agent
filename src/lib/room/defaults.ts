@@ -32,8 +32,7 @@ export function createDefaultRoomConfig(roomId: string): RoomConfig {
         "世界处于资源稀缺与秩序重建阶段。",
         "不同阵营在理念与利益上持续碰撞，任何选择都有代价。",
       ].join("\n"),
-      storyBible: "编剧尚未生成完整世界观档案。",
-      plotOutline: "编剧尚未生成情节蓝图。",
+      playwrightOutput: "编剧尚未生成完整的世界观与情节方案。",
     },
     characters: [
       {

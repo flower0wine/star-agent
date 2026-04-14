@@ -64,7 +64,10 @@ export async function POST(request: NextRequest) {
               if (event.type === "start") {
                 writeEvent("start", event);
               } else if (event.type === "delta") {
-                writeEvent("delta", { text: event.text });
+                writeEvent("delta", {
+                  text: event.text,
+                  partType: event.partType,
+                });
               } else if (event.type === "done") {
                 writeEvent("done", event.payload);
               }

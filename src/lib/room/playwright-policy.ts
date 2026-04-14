@@ -3,8 +3,7 @@ import type { RoomConfig, RoomPromptRevision } from "./types";
 
 const playwrightRevisionSchema = z.object({
   worldPromptTemplate: z.string().min(1),
-  storyBible: z.string().min(1),
-  plotOutline: z.string().min(1),
+  playwrightOutput: z.string().min(1),
   characterPromptPatches: z.array(
     z.object({
       characterId: z.string().min(1),
@@ -16,8 +15,7 @@ const playwrightRevisionSchema = z.object({
 
 export interface ParsedPlaywrightRevision {
   worldPromptTemplate: string;
-  storyBible: string;
-  plotOutline: string;
+  playwrightOutput: string;
   characterPromptPatches: Array<{
     characterId: string;
     prompt: string;
@@ -39,7 +37,7 @@ export function buildPlaywrightRevisionPrompt(input: {
     "你是故事总编剧，需要根据对话进展重写世界观与角色人格。",
     "必须遵守用户给出的创作指令。",
     "输出必须是 JSON，禁止输出 JSON 之外的任何文字。",
-    "JSON 字段要求：worldPromptTemplate, storyBible, plotOutline, characterPromptPatches, rationale。",
+    "JSON 字段要求：worldPromptTemplate, playwrightOutput, characterPromptPatches, rationale。",
     "characterPromptPatches 必须覆盖所有启用角色。",
     "每个 prompt 需要体现独特性格、冲突动机和语言风格，避免套路化。",
     "",
@@ -105,8 +103,7 @@ export function applyPromptRevision(input: {
     ...input.roomConfig,
     world: {
       worldPromptTemplate: input.revision.worldPromptTemplate,
-      storyBible: input.revision.storyBible,
-      plotOutline: input.revision.plotOutline,
+      playwrightOutput: input.revision.playwrightOutput,
     },
     characters: nextCharacters,
     updatedAt: Date.now(),
@@ -119,8 +116,7 @@ export function applyPromptRevision(input: {
       roomId: input.roomConfig.roomId,
       cycleNo: input.cycleNo,
       worldPromptTemplate: input.revision.worldPromptTemplate,
-      storyBible: input.revision.storyBible,
-      plotOutline: input.revision.plotOutline,
+      playwrightOutput: input.revision.playwrightOutput,
       characterPromptPatches: input.revision.characterPromptPatches,
       rationale: input.revision.rationale,
       createdAt: input.createdAt,

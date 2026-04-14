@@ -118,6 +118,10 @@ export interface RoomMessageRecord {
     type: "text" | "tool-summary";
     text: string;
   }>;
+  renderParts?: Array<{
+    type: "text" | "reasoning" | "tool-summary";
+    text: string;
+  }>;
   metadata?: Record<string, unknown>;
   createdAt: number;
 }
@@ -127,8 +131,7 @@ export interface RoomPromptRevisionRecord {
   roomId: string;
   cycleNo: number;
   worldPromptTemplate: string;
-  storyBible: string;
-  plotOutline: string;
+  playwrightOutput: string;
   characterPromptPatches: Array<{
     characterId: string;
     prompt: string;

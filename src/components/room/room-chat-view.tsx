@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2Icon, WandSparklesIcon } from "lucide-react";
+import { Loader2Icon, PauseIcon, PlayIcon } from "lucide-react";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useRoomSession } from "@/hooks/use-room-session";
 import { RoomStatusBar } from "./room-status-bar";
@@ -18,8 +18,6 @@ interface RoomChatViewProps {
 export function RoomChatView({ roomId }: RoomChatViewProps) {
   const [input, setInput] = useState("");
   const [autoRunEnabled, setAutoRunEnabled] = useState(false);
-  const [autoRunRemaining, setAutoRunRemaining] = useState(0);
-  const [autoRunBatchSize, setAutoRunBatchSize] = useState(20);
   const [autoRunDelayMs, setAutoRunDelayMs] = useState(800);
 
   const { defaultProviderId, defaultModelId, providerApiKeys } = useSettingsStore();
@@ -42,7 +40,6 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
     turnState,
     messages,
     streamingMessage,
-    promptRevisions,
     addUserMessage,
     runNextTurn,
     updateRoomConfig,
@@ -62,18 +59,12 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
     if (!autoRunEnabled) {
       return;
     }
-    if (autoRunRemaining <= 0) {
-      setAutoRunEnabled(false);
-      return;
-    }
     if (!isReady || isRunning) {
       return;
     }
 
     const timer = window.setTimeout(() => {
-      void runNextTurn().then(() => {
-        setAutoRunRemaining(prev => Math.max(0, prev - 1));
-      });
+      void runNextTurn();
     }, autoRunDelayMs);
 
     return () => {
@@ -82,7 +73,6 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
   }, [
     autoRunDelayMs,
     autoRunEnabled,
-    autoRunRemaining,
     isReady,
     isRunning,
     runNextTurn,
@@ -91,7 +81,6 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
   useEffect(() => {
     if (error && autoRunEnabled) {
       setAutoRunEnabled(false);
-      setAutoRunRemaining(0);
     }
   }, [autoRunEnabled, error]);
 
@@ -115,7 +104,6 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
         <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
           <RoomDirectorPanel
             roomConfig={roomConfig}
-            promptRevisions={promptRevisions}
             onUpdate={updateRoomConfig}
           />
           <RoomCharacterPanel
@@ -129,15 +117,6 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
           <span className="text-sm text-muted-foreground">自动推进</span>
           <Input
             type="number"
-            min={1}
-            max={500}
-            value={autoRunBatchSize}
-            onChange={(event) => setAutoRunBatchSize(Math.max(1, Number(event.target.value) || 1))}
-            className="h-8 w-24"
-          />
-          <span className="text-xs text-muted-foreground">轮</span>
-          <Input
-            type="number"
             min={200}
             step={100}
             value={autoRunDelayMs}
@@ -149,23 +128,12 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
             type="button"
             variant={autoRunEnabled ? "secondary" : "outline"}
             onClick={() => {
-              if (autoRunEnabled) {
-                setAutoRunEnabled(false);
-                setAutoRunRemaining(0);
-                return;
-              }
-              setAutoRunRemaining(autoRunBatchSize);
-              setAutoRunEnabled(true);
+              setAutoRunEnabled(prev => !prev);
             }}
-            disabled={isRunning && !autoRunEnabled}
           >
-            {autoRunEnabled ? "停止" : "启动"}
+            {autoRunEnabled ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4" />}
+            {autoRunEnabled ? "暂停角色对话" : "启动角色对话"}
           </Button>
-          {autoRunEnabled && (
-            <span className="text-xs text-muted-foreground">
-              剩余 {autoRunRemaining} 轮
-            </span>
-          )}
         </div>
 
         <div className="flex gap-2">
@@ -176,8 +144,12 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                void addUserMessage(input);
+                const text = input;
                 setInput("");
+                void (async () => {
+                  await addUserMessage(text);
+                  await runNextTurn();
+                })();
               }
             }}
           />
@@ -185,16 +157,16 @@ export function RoomChatView({ roomId }: RoomChatViewProps) {
             type="button"
             variant="outline"
             onClick={() => {
-              void addUserMessage(input);
+              const text = input;
               setInput("");
+              void (async () => {
+                await addUserMessage(text);
+                await runNextTurn();
+              })();
             }}
             disabled={!input.trim()}
           >
             发送
-          </Button>
-          <Button type="button" onClick={() => void runNextTurn()} disabled={isRunning}>
-            {isRunning ? <Loader2Icon className="size-4 animate-spin" /> : <WandSparklesIcon className="size-4" />}
-            推进
           </Button>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
