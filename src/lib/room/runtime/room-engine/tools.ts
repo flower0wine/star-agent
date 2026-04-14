@@ -71,114 +71,89 @@ export function createPlaywrightControlTools(input: {
       createCharacter: tool({
         description: [
           "创建一个新角色并加入交流室。",
-          "必须填写模板字段：name、personalityTraits、coreValues、distinctiveTraits、speakingStyle、motivation、worldview、conflictLine。",
           "角色名称必须为中文名称（仅中文字符，可包含·）。",
           `角色上限为 ${MAX_ROOM_CHARACTERS}，名称不可重复。`,
         ].join(" "),
         inputSchema: createCharacterToolInputSchema,
-        execute: async (rawInput): Promise<CreateCharacterToolResult> => {
+        execute: async (toolInput): Promise<CreateCharacterToolResult> => {
           const startedAt = Date.now();
-          const rawInputRecord = rawInput && typeof rawInput === "object"
-            ? rawInput as Record<string, unknown>
-            : {};
+          const name = normalizeCharacterName(toolInput.name);
+          let result: CreateCharacterToolResult;
 
-          try {
-            const parsed = createCharacterToolInputSchema.parse(rawInput);
-            const name = normalizeCharacterName(parsed.name);
-            let result: CreateCharacterToolResult;
-
-            if (!isChineseCharacterName(name)) {
+          if (!isChineseCharacterName(name)) {
+            result = {
+              status: "rejected",
+              message: "角色名称必须使用中文（2-12字，可包含·），请重新命名。",
+            };
+          } else if (nextRoomConfig.characters.length >= MAX_ROOM_CHARACTERS) {
+            result = {
+              status: "rejected",
+              message: `当前角色已达上限 ${MAX_ROOM_CHARACTERS}，请先复用或精简现有角色。`,
+            };
+          } else {
+            const duplicated = nextRoomConfig.characters.some((character) =>
+              character.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+            );
+            if (duplicated) {
               result = {
                 status: "rejected",
-                message: "角色名称必须使用中文（2-12字，可包含·），请重新命名。",
-              };
-            } else if (nextRoomConfig.characters.length >= MAX_ROOM_CHARACTERS) {
-              result = {
-                status: "rejected",
-                message: `当前角色已达上限 ${MAX_ROOM_CHARACTERS}，请先复用或精简现有角色。`,
+                message: `角色名“${name}”已存在，请更换名称。`,
               };
             } else {
-              const duplicated = nextRoomConfig.characters.some((character) =>
-                character.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
-              );
-              if (duplicated) {
-                result = {
-                  status: "rejected",
-                  message: `角色名“${name}”已存在，请更换名称。`,
-                };
-              } else {
-                const highestOrder = nextRoomConfig.characters.length === 0
-                  ? 0
-                  : Math.max(...nextRoomConfig.characters.map(character => character.order));
-                const characterId = `character-${crypto.randomUUID().slice(0, 8)}`;
+              const highestOrder = nextRoomConfig.characters.length === 0
+                ? 0
+                : Math.max(...nextRoomConfig.characters.map(character => character.order));
+              const characterId = `character-${crypto.randomUUID().slice(0, 8)}`;
 
-                nextRoomConfig = {
-                  ...nextRoomConfig,
-                  characters: [
-                    ...nextRoomConfig.characters,
-                    {
-                      id: characterId,
+              nextRoomConfig = {
+                ...nextRoomConfig,
+                characters: [
+                  ...nextRoomConfig.characters,
+                  {
+                    id: characterId,
+                    name,
+                    enabled: true,
+                    order: highestOrder + 1,
+                    systemPromptTemplate: buildCharacterPromptTemplate({
+                      ...toolInput,
                       name,
-                      enabled: true,
-                      order: highestOrder + 1,
-                      systemPromptTemplate: buildCharacterPromptTemplate({
-                        ...parsed,
-                        name,
-                      }),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                };
+                    }),
+                  },
+                ],
+                updatedAt: Date.now(),
+              };
 
-                console.log(`[${input.requestId}] playwright created character`, {
-                  roomId: input.roomId,
-                  characterId,
-                  name,
-                });
+              console.log(`[${input.requestId}] playwright created character`, {
+                roomId: input.roomId,
+                characterId,
+                name,
+              });
 
-                result = {
-                  status: "created",
-                  message: `角色 ${name} 已加入并启用。`,
-                  characterId,
-                  characterName: name,
-                };
-              }
+              result = {
+                status: "created",
+                message: `角色 ${name} 已加入并启用。`,
+                characterId,
+                characterName: name,
+              };
             }
-
-            const withDuration = {
-              ...result,
-              __duration: Date.now() - startedAt,
-            };
-            toolRenderParts?.push({
-              type: "tool-createCharacter",
-              state: "output-available",
-              input: rawInputRecord,
-              output: withDuration as Record<string, unknown>,
-            });
-            return withDuration;
-          } catch (error) {
-            const message = error instanceof Error
-              ? error.message
-              : "角色模板校验失败";
-            const result = {
-              status: "rejected" as const,
-              message: "角色模板不符合要求，请检查字段后重试。",
-              __duration: Date.now() - startedAt,
-            };
-            toolRenderParts?.push({
-              type: "tool-createCharacter",
-              state: "output-error",
-              input: rawInputRecord,
-              errorText: message,
-              output: result as Record<string, unknown>,
-            });
-            return result;
           }
+
+          const withDuration = {
+            ...result,
+            __duration: Date.now() - startedAt,
+          };
+          toolRenderParts?.push({
+            type: "tool-createCharacter",
+            state: "output-available",
+            input: toolInput as Record<string, unknown>,
+            output: withDuration as Record<string, unknown>,
+          });
+          return withDuration;
         },
       }),
       startRoleCycle: tool({
         description: [
-          "当世界观与角色准备完成后调用，正式启动角色轮回对话。",
+          "当你确定世界观与角色准备完成后调用，正式启动角色轮回对话。",
           "调用后系统进入角色串行发言阶段；当一个轮回结束会自动重置为未启动状态。",
         ].join(" "),
         inputSchema: z.object({}),
