@@ -12,9 +12,14 @@ export default function HomePage() {
         </p>
       </div>
       <div>
-        <Button asChild>
-          <Link href="/demo/vercel-ai-sdk">打开 Vercel AI SDK Demo</Link>
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild>
+            <Link href="/demo/vercel-ai-sdk">打开 Vercel AI SDK Demo</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/room">进入多 Agent 聊天室</Link>
+          </Button>
+        </div>
       </div>
     </main>
   );

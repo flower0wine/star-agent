@@ -46,9 +46,9 @@ const DEFAULT_ITEM_BY_SECTION: Partial<Record<SettingsSection, string>> = {
   agents: "agent",
 };
 
-type SettingsSearchParamsReader = {
+interface SettingsSearchParamsReader {
   get: (key: string) => string | null;
-};
+}
 
 interface SettingsRenderContext {
   activeItem?: string;

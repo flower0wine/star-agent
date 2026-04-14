@@ -2,11 +2,12 @@
  * Patent Agent Handler
  */
 
-import { convertToModelMessages, stepCountIs, streamText } from "ai";
+import { convertToModelMessages, stepCountIs } from "ai";
 import dayjs from "dayjs";
 import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
 import { buildChatMessageMetadata } from "@/lib/chat/message-metadata";
-import { buildTelemetrySettings } from "@/lib/observability/telemetry";
+import { observedStreamText } from "@/lib/observability/ai-sdk";
+import type { StreamTextOptions } from "@/lib/observability/ai-sdk";
 import { getModel } from "./model";
 import type { AgentConfigPayload, ChatRequestBody } from "./types";
 
@@ -30,18 +31,13 @@ export async function handlePatentAgent(
 
   const { model, supportsReasoning } = await getModel(body.modelConfig);
 
-  const streamOptions: Parameters<typeof streamText>[0] = {
+  const streamOptions: StreamTextOptions = {
     model,
     tools,
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
     abortSignal,
-    experimental_telemetry: buildTelemetrySettings({
-      functionId: "chat.patent.stream",
-      requestId,
-      agentId: "patent",
-    }),
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`[${requestId}] Patent tool started: ${toolCall.toolName}`, {
         toolCallId: toolCall.toolCallId,
@@ -66,7 +62,11 @@ export async function handlePatentAgent(
     });
   }
 
-  const result = streamText(streamOptions);
+  const result = observedStreamText(streamOptions, {
+    functionId: "chat.patent.stream",
+    requestId,
+    agentId: "patent",
+  });
 
   return result.toUIMessageStreamResponse({
     messageMetadata: ({ part }) => {

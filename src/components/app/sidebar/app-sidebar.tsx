@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PlusIcon, SettingsIcon, StarIcon } from "lucide-react";
+import { BookOpenIcon, PlusIcon, SettingsIcon, StarIcon } from "lucide-react";
 
+import { createRoom } from "@/lib/storage";
 import { useChatHistoryStore } from "@/stores/chat-history-store";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +34,11 @@ export function AppSidebar() {
     // 清除当前选择，导航到新对话页面
     selectConversation(null);
     router.push("/chat");
+  };
+
+  const handleNewRoom = async () => {
+    const room = await createRoom();
+    router.push(`/room/${room.id}`);
   };
 
   const handleSelectConversation = (conversationId: string) => {
@@ -84,6 +90,17 @@ export function AppSidebar() {
             >
               <PlusIcon className="size-4" />
               <span className="group-data-[collapsible=icon]:hidden">新建对话</span>
+            </Button>
+          </div>
+
+          <div className="px-2 pb-2">
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2"
+              onClick={() => void handleNewRoom()}
+            >
+              <BookOpenIcon className="size-4" />
+              <span className="group-data-[collapsible=icon]:hidden">新建聊天室</span>
             </Button>
           </div>
 

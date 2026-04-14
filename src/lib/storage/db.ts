@@ -85,6 +85,59 @@ export interface GitHubCacheEntry {
 }
 
 // ============================================================================
+// Room Types
+// ============================================================================
+
+export interface RoomRecord {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RoomConfigRecord {
+  roomId: string;
+  config: unknown;
+  updatedAt: number;
+}
+
+export interface RoomTurnStateRecord {
+  roomId: string;
+  state: unknown;
+  updatedAt: number;
+}
+
+export interface RoomMessageRecord {
+  id: string;
+  roomId: string;
+  turnNo: number;
+  actorType: "user" | "character" | "playwright" | "system";
+  actorId: string;
+  actorName: string;
+  visibleParts: Array<{
+    type: "text" | "tool-summary";
+    text: string;
+  }>;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface RoomPromptRevisionRecord {
+  id: string;
+  roomId: string;
+  cycleNo: number;
+  worldPromptTemplate: string;
+  storyBible: string;
+  plotOutline: string;
+  characterPromptPatches: Array<{
+    characterId: string;
+    prompt: string;
+  }>;
+  rationale: string;
+  createdAt: number;
+}
+
+// ============================================================================
 // Database Schema
 // ============================================================================
 
@@ -120,10 +173,48 @@ interface StarAgentDB extends DBSchema {
       "by-expires": number;
     };
   };
+  rooms: {
+    key: string;
+    value: RoomRecord;
+    indexes: {
+      "by-updated": number;
+    };
+  };
+  roomConfigs: {
+    key: string;
+    value: RoomConfigRecord;
+    indexes: {
+      "by-updated": number;
+    };
+  };
+  roomTurnStates: {
+    key: string;
+    value: RoomTurnStateRecord;
+    indexes: {
+      "by-updated": number;
+    };
+  };
+  roomMessages: {
+    key: string;
+    value: RoomMessageRecord;
+    indexes: {
+      "by-room": string;
+      "by-room-turn": [string, number];
+      "by-room-created": [string, number];
+    };
+  };
+  roomPromptRevisions: {
+    key: string;
+    value: RoomPromptRevisionRecord;
+    indexes: {
+      "by-room": string;
+      "by-room-created": [string, number];
+    };
+  };
 }
 
 const DB_NAME = "star-agent-db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbInstance: IDBPDatabase<StarAgentDB> | null = null;
 
@@ -172,6 +263,47 @@ export async function getDB(): Promise<IDBPDatabase<StarAgentDB>> {
           });
           cacheStore.createIndex("by-username", "username");
           cacheStore.createIndex("by-expires", "expiresAt");
+        }
+      }
+
+      // Version 3: room stores
+      if (oldVersion < 3) {
+        if (!db.objectStoreNames.contains("rooms")) {
+          const roomStore = db.createObjectStore("rooms", {
+            keyPath: "id",
+          });
+          roomStore.createIndex("by-updated", "updatedAt");
+        }
+
+        if (!db.objectStoreNames.contains("roomConfigs")) {
+          const roomConfigStore = db.createObjectStore("roomConfigs", {
+            keyPath: "roomId",
+          });
+          roomConfigStore.createIndex("by-updated", "updatedAt");
+        }
+
+        if (!db.objectStoreNames.contains("roomTurnStates")) {
+          const roomTurnStateStore = db.createObjectStore("roomTurnStates", {
+            keyPath: "roomId",
+          });
+          roomTurnStateStore.createIndex("by-updated", "updatedAt");
+        }
+
+        if (!db.objectStoreNames.contains("roomMessages")) {
+          const roomMessageStore = db.createObjectStore("roomMessages", {
+            keyPath: "id",
+          });
+          roomMessageStore.createIndex("by-room", "roomId");
+          roomMessageStore.createIndex("by-room-turn", ["roomId", "turnNo"]);
+          roomMessageStore.createIndex("by-room-created", ["roomId", "createdAt"]);
+        }
+
+        if (!db.objectStoreNames.contains("roomPromptRevisions")) {
+          const roomPromptRevisionStore = db.createObjectStore("roomPromptRevisions", {
+            keyPath: "id",
+          });
+          roomPromptRevisionStore.createIndex("by-room", "roomId");
+          roomPromptRevisionStore.createIndex("by-room-created", ["roomId", "createdAt"]);
         }
       }
     },

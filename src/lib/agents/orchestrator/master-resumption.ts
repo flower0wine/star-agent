@@ -4,9 +4,9 @@
  * Handles resuming master agent execution with sub-agent results.
  */
 
-import { streamText } from "ai";
 import type { ModelMessage } from "ai";
-import { buildTelemetrySettings } from "@/lib/observability/telemetry";
+import { observedStreamText } from "@/lib/observability/ai-sdk";
+import type { StreamTextOptions } from "@/lib/observability/ai-sdk";
 import type { SubAgentResult } from "./types";
 
 /**
@@ -78,14 +78,14 @@ function formatResultsAsMessage(
  */
 export async function resumeMasterAgent(
   options: {
-    model: Parameters<typeof streamText>[0]["model"];
-    tools: Parameters<typeof streamText>[0]["tools"];
-    system: Parameters<typeof streamText>[0]["system"];
+    model: StreamTextOptions["model"];
+    tools: StreamTextOptions["tools"];
+    system: StreamTextOptions["system"];
     messages: ModelMessage[];
     subAgentResults: SubAgentResult[];
     cycleNumber: number;
     requestId?: string;
-    providerOptions?: Parameters<typeof streamText>[0]["providerOptions"];
+    providerOptions?: StreamTextOptions["providerOptions"];
   },
 ) {
   const { model, tools, system, messages, cycleNumber, requestId, providerOptions } = options;
@@ -99,21 +99,12 @@ export async function resumeMasterAgent(
     ? `[${requestId}/Resume/Cycle-${cycleNumber}]`
     : `[MasterResume/Cycle-${cycleNumber}]`;
 
-  return streamText({
+  return observedStreamText({
     model,
     tools,
     system,
     messages: updatedMessages,
     providerOptions,
-    experimental_telemetry: buildTelemetrySettings({
-      functionId: "chat.master.resume",
-      requestId: requestId ?? `resume-cycle-${cycleNumber}`,
-      agentId: "master",
-      metadata: {
-        cycleNumber,
-        subAgentResultsCount: options.subAgentResults.length,
-      },
-    }),
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`${logPrefix} Tool started: ${toolCall.toolName}`, {
         toolCallId: toolCall.toolCallId,
@@ -127,6 +118,14 @@ export async function resumeMasterAgent(
         success,
         error: error ? String(error) : undefined,
       });
+    },
+  }, {
+    functionId: "chat.master.resume",
+    requestId: requestId ?? `resume-cycle-${cycleNumber}`,
+    agentId: "master",
+    metadata: {
+      cycleNumber,
+      subAgentResultsCount: options.subAgentResults.length,
     },
   });
 }

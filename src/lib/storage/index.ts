@@ -31,6 +31,11 @@ export type {
   AgentDynamicConfig,
   GitHubCacheDataType,
   GitHubCacheEntry,
+  RoomConfigRecord,
+  RoomMessageRecord,
+  RoomPromptRevisionRecord,
+  RoomRecord,
+  RoomTurnStateRecord,
 } from "./db";
 
 // GitHub cache storage
@@ -57,3 +62,20 @@ export {
   saveMessages,
   updateLastMessage,
 } from "./message-storage";
+
+// Room storage
+export {
+  appendRoomMessage,
+  appendRoomMessages,
+  createRoom,
+  ensureRoom,
+  getRoom,
+  getRoomConfig,
+  getRoomMessages,
+  getRoomPromptRevisions,
+  getRoomTurnState,
+  listRooms,
+  saveRoomPromptRevision,
+  upsertRoomConfig,
+  upsertRoomTurnState,
+} from "./room-storage";

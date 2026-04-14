@@ -4,12 +4,13 @@
  * Handles requests for the Star Agent (GitHub stars recommendation agent)
  */
 
-import { convertToModelMessages, streamText, stepCountIs } from "ai";
+import { convertToModelMessages, stepCountIs } from "ai";
 import dayjs from "dayjs";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
-import { buildTelemetrySettings } from "@/lib/observability/telemetry";
+import { observedStreamText } from "@/lib/observability/ai-sdk";
+import type { StreamTextOptions } from "@/lib/observability/ai-sdk";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
@@ -78,22 +79,13 @@ export async function handleStarAgent(
   const { model, supportsReasoning } = await getModel(body.modelConfig);
 
   // Build streamText options
-  const streamOptions: Parameters<typeof streamText>[0] = {
+  const streamOptions: StreamTextOptions = {
     model,
     tools,
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
     abortSignal,
-    experimental_telemetry: buildTelemetrySettings({
-      functionId: "chat.star.stream",
-      requestId,
-      agentId: "star",
-      metadata: {
-        username,
-        reposCount: finalRepos.length,
-      },
-    }),
     // 添加工具调用生命周期回调，用于记录工具执行时间
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`[${requestId}] Tool started: ${toolCall.toolName}`, {
@@ -121,7 +113,15 @@ export async function handleStarAgent(
   }
 
   // Use streamText for streaming response
-  const result = streamText(streamOptions);
+  const result = observedStreamText(streamOptions, {
+    functionId: "chat.star.stream",
+    requestId,
+    agentId: "star",
+    metadata: {
+      username,
+      reposCount: finalRepos.length,
+    },
+  });
 
   // Return streaming response with token usage metadata
   return result.toUIMessageStreamResponse({

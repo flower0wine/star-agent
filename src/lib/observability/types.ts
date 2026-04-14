@@ -5,7 +5,12 @@ export type TelemetryFunctionId
     | "chat.patent.stream"
     | "chat.master.stream"
     | "chat.master.resume"
-    | "chat.subagent.run";
+    | "chat.subagent.run"
+    | "room.character.direction"
+    | "room.character.stream"
+    | "room.playwright.reply"
+    | "room.playwright.feedback-revision"
+    | "room.playwright.cycle-revision";
 
 export interface TelemetryBuildContext {
   functionId: TelemetryFunctionId;

@@ -6,11 +6,12 @@
  * KEY CHANGE: Now uses multi-stream response to support parallel sub-agent execution.
  */
 
-import { convertToModelMessages, streamText, stepCountIs } from "ai";
+import { convertToModelMessages, stepCountIs } from "ai";
 import { NextResponse } from "next/server";
 import type { GitHubRepo } from "@/lib/github/api";
 import { resolveAgentRuntime } from "@/lib/agents/base/runtime-resolver";
-import { buildTelemetrySettings } from "@/lib/observability/telemetry";
+import { observedStreamText } from "@/lib/observability/ai-sdk";
+import type { StreamTextOptions } from "@/lib/observability/ai-sdk";
 import { getModel } from "./model";
 import { getRepos } from "./cache";
 import type { ChatRequestBody, AgentConfigPayload } from "./types";
@@ -74,21 +75,12 @@ export async function handleMasterAgent(
   });
 
   // Build streamText options
-  const streamOptions: Parameters<typeof streamText>[0] = {
+  const streamOptions: StreamTextOptions = {
     model: modelInstance.model,
     tools,
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
-    experimental_telemetry: buildTelemetrySettings({
-      functionId: "chat.master.stream",
-      requestId,
-      agentId: "master",
-      metadata: {
-        username,
-        reposCount: finalRepos.length,
-      },
-    }),
     experimental_onToolCallStart: ({ toolCall }) => {
       console.log(`[${requestId}] Master tool started: ${toolCall.toolName}`, {
         toolCallId: toolCall.toolCallId,
@@ -115,7 +107,15 @@ export async function handleMasterAgent(
   }
 
   // Use streamText for streaming response
-  const masterStream = streamText(streamOptions);
+  const masterStream = observedStreamText(streamOptions, {
+    functionId: "chat.master.stream",
+    requestId,
+    agentId: "master",
+    metadata: {
+      username,
+      reposCount: finalRepos.length,
+    },
+  });
 
   // Prepare master config for resumption
   const masterConfig = {
