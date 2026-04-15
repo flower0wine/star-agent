@@ -27,6 +27,16 @@ function toRenderUIPart(part: SharedMessageRenderPart) {
     } as const;
   }
 
+  if (part.type === "tool-setWorldBlueprint") {
+    return {
+      type: "tool-setWorldBlueprint",
+      state: part.state || "output-available",
+      input: part.input,
+      output: part.output,
+      errorText: part.errorText,
+    } as const;
+  }
+
   if (part.type === "tool-startRoleCycle") {
     return {
       type: "tool-startRoleCycle",

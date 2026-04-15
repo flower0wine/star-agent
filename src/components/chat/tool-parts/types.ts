@@ -75,6 +75,18 @@ export interface CreateCharacterToolOutput {
   __duration?: number;
 }
 
+export interface SetWorldBlueprintToolInput {
+  worldPromptTemplate?: string;
+  storyOutline?: string;
+  playwrightOutput?: string;
+}
+
+export interface SetWorldBlueprintToolOutput {
+  status?: "configured" | "rejected";
+  message?: string;
+  __duration?: number;
+}
+
 export interface StartRoleCycleToolOutput {
   status?: "started" | "rejected";
   message?: string;

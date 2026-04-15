@@ -1,4 +1,5 @@
 import { observedStreamText } from "@/lib/observability/ai-sdk";
+import { stepCountIs } from "ai";
 import { createTextSharedMessage } from "../../message-share-filter";
 import type { RoomStreamEvent } from "./events";
 import type { RoomEngineRuntimeContext } from "./context";
@@ -42,6 +43,7 @@ export async function* runBootstrapPhase(
     system: roomConfig.playwright.systemPromptTemplate,
     prompt: buildPlaywrightBootstrapPrompt(roomConfig, conversationText),
     tools: controlTools.tools,
+    stopWhen: stepCountIs(12),
     providerOptions: modelInstance.supportsReasoning
       ? { reasoningSummary: "detailed" as const } as any
       : undefined,
@@ -101,16 +103,10 @@ export async function* runBootstrapPhase(
     }
   }
 
-  const bootstrapText = visibleParts.map(part => part.text).join("").trim() || "编剧初始化完成。";
-
-  const nextConfig = {
-    ...controlTools.getNextRoomConfig(),
-    world: {
-      worldPromptTemplate: bootstrapText,
-      playwrightOutput: bootstrapText,
-    },
-    updatedAt: Date.now(),
-  };
+  const nextConfig = controlTools.getNextRoomConfig();
+  const bootstrapText = visibleParts.map(part => part.text).join("").trim()
+    || nextConfig.world.playwrightOutput.trim()
+    || "编剧初始化完成。";
 
   const message = createTextSharedMessage({
     id: `room-msg-${crypto.randomUUID()}`,

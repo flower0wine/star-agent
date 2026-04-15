@@ -31,6 +31,7 @@ import {
   DisplayRepositoriesToolPart,
   SearchPatentsToolPart,
   CreateCharacterToolPart,
+  SetWorldBlueprintToolPart,
   StartRoleCycleToolPart,
 } from "./tool-parts";
 import {
@@ -351,6 +352,16 @@ export const MessageRenderer = memo(({
             key={`tool-createCharacter-${i}`}
             part={part as any}
             itemKey={`tool-createCharacter-${i}`}
+          />
+        );
+      }
+
+      if (partType === "tool-setWorldBlueprint") {
+        return (
+          <SetWorldBlueprintToolPart
+            key={`tool-setWorldBlueprint-${i}`}
+            part={part as any}
+            itemKey={`tool-setWorldBlueprint-${i}`}
           />
         );
       }

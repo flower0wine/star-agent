@@ -104,6 +104,7 @@ export function applyPromptRevision(input: {
     world: {
       worldPromptTemplate: input.revision.worldPromptTemplate,
       playwrightOutput: input.revision.playwrightOutput,
+      storyOutline: input.roomConfig.world.storyOutline,
     },
     characters: nextCharacters,
     updatedAt: Date.now(),

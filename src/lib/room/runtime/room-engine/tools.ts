@@ -17,11 +17,23 @@ const createCharacterToolInputSchema = z.object({
   conflictLine: z.string().trim().min(6).max(120),
 });
 
+const setWorldBlueprintToolInputSchema = z.object({
+  worldPromptTemplate: z.string().trim().min(80).max(8000),
+  storyOutline: z.string().trim().min(40).max(4000),
+  playwrightOutput: z.string().trim().min(80).max(8000),
+});
+
 interface CreateCharacterToolResult {
   status: "created" | "rejected";
   message: string;
   characterId?: string;
   characterName?: string;
+  __duration?: number;
+}
+
+interface SetWorldBlueprintToolResult {
+  status: "configured" | "rejected";
+  message: string;
   __duration?: number;
 }
 
@@ -68,6 +80,57 @@ export function createPlaywrightControlTools(input: {
 
   return {
     tools: {
+      setWorldBlueprint: tool({
+        description: [
+          "配置本轮故事世界观与主线蓝图。",
+          "必须在开启角色轮回前调用，用于沉淀结构化世界设定。",
+        ].join(" "),
+        inputSchema: setWorldBlueprintToolInputSchema,
+        execute: async (toolInput): Promise<SetWorldBlueprintToolResult> => {
+          const startedAt = Date.now();
+          const worldPromptTemplate = toolInput.worldPromptTemplate.trim();
+          const storyOutline = toolInput.storyOutline.trim();
+          const playwrightOutput = toolInput.playwrightOutput.trim();
+
+          if (!worldPromptTemplate || !storyOutline || !playwrightOutput) {
+            const rejected = {
+              status: "rejected" as const,
+              message: "世界观模板、主线蓝图与展示稿均不能为空。",
+              __duration: Date.now() - startedAt,
+            };
+            toolRenderParts?.push({
+              type: "tool-setWorldBlueprint",
+              state: "output-available",
+              input: toolInput as Record<string, unknown>,
+              output: rejected as Record<string, unknown>,
+            });
+            return rejected;
+          }
+
+          nextRoomConfig = {
+            ...nextRoomConfig,
+            world: {
+              worldPromptTemplate,
+              storyOutline,
+              playwrightOutput,
+            },
+            updatedAt: Date.now(),
+          };
+
+          const result = {
+            status: "configured" as const,
+            message: "世界观与主线蓝图已更新。",
+            __duration: Date.now() - startedAt,
+          };
+          toolRenderParts?.push({
+            type: "tool-setWorldBlueprint",
+            state: "output-available",
+            input: toolInput as Record<string, unknown>,
+            output: result as Record<string, unknown>,
+          });
+          return result;
+        },
+      }),
       createCharacter: tool({
         description: [
           "创建一个新角色并加入交流室。",
@@ -162,10 +225,12 @@ export function createPlaywrightControlTools(input: {
           const enabledCharacters = nextRoomConfig.characters.filter(character => character.enabled);
           let result: StartRoleCycleToolResult;
 
-          if (nextRoomConfig.world.playwrightOutput.trim().length === 0) {
+          if (nextRoomConfig.world.worldPromptTemplate.trim().length === 0
+            || nextRoomConfig.world.playwrightOutput.trim().length === 0
+            || nextRoomConfig.world.storyOutline.trim().length === 0) {
             result = {
               status: "rejected",
-              message: "请先完成世界观与剧情蓝图输出，再开启轮回。",
+              message: "请先调用 setWorldBlueprint 完成世界观与主线蓝图，再开启轮回。",
             };
           } else if (enabledCharacters.length < 2) {
             result = {

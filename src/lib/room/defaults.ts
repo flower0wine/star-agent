@@ -23,6 +23,7 @@ export function createDefaultRoomConfig(roomId: string): RoomConfig {
     world: {
       worldPromptTemplate: "",
       playwrightOutput: "",
+      storyOutline: "",
     },
     characters: [],
     updatedAt: now,

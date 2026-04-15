@@ -1,4 +1,6 @@
 import { observedStreamText } from "@/lib/observability/ai-sdk";
+import { stepCountIs } from "ai";
+import { buildCharacterConversationText } from "../room-context-builder";
 import { createTextSharedMessage } from "../../message-share-filter";
 import { resolveNextSpeaker } from "../../turn-policy";
 import type { RoomStreamEvent } from "./events";
@@ -21,11 +23,11 @@ export async function* runCharacterPhase(
     roomSessionId,
     nowIso,
     turnNo,
-    conversationText,
     modelInstance,
     roomConfig,
     turnState,
   } = context;
+  const conversationText = buildCharacterConversationText(input.sharedMessages);
 
   const nextSpeaker = resolveNextSpeaker(roomConfig.characters, turnState);
   const directionPrompt = [
@@ -66,6 +68,7 @@ export async function* runCharacterPhase(
     system: roomConfig.playwright.systemPromptTemplate,
     prompt: directionPrompt,
     tools: controlTools.tools,
+    stopWhen: stepCountIs(6),
     providerOptions: modelInstance.supportsReasoning
       ? { reasoningSummary: "detailed" as const } as any
       : undefined,

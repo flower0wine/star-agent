@@ -8,7 +8,7 @@ export interface SharedMessagePart {
 }
 
 export interface SharedMessageRenderPart {
-  type: "text" | "reasoning" | "tool-summary" | "tool-createCharacter" | "tool-startRoleCycle";
+  type: "text" | "reasoning" | "tool-summary" | "tool-createCharacter" | "tool-setWorldBlueprint" | "tool-startRoleCycle";
   text?: string;
   state?: "input-streaming" | "output-available" | "output-error";
   input?: Record<string, unknown>;
@@ -50,6 +50,7 @@ export interface RoomPlaywrightProfile {
 export interface RoomWorldConfig {
   worldPromptTemplate: string;
   playwrightOutput: string;
+  storyOutline: string;
 }
 
 export interface RoomConfig {

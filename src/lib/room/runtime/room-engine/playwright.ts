@@ -1,4 +1,5 @@
 import { observedStreamText } from "@/lib/observability/ai-sdk";
+import { stepCountIs } from "ai";
 import { createTextSharedMessage } from "../../message-share-filter";
 import { buildPlaywrightRevisionPrompt, parsePlaywrightRevisionJSON, applyPromptRevision } from "../../playwright-policy";
 import { createRoomPromptRevisionId } from "../../defaults";
@@ -49,6 +50,7 @@ export async function* runPreCycleControlPhase(
       clientFeedback,
     }),
     tools: controlTools.tools,
+    stopWhen: stepCountIs(12),
     providerOptions: modelInstance.supportsReasoning
       ? { reasoningSummary: "detailed" as const } as any
       : undefined,

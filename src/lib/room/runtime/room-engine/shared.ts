@@ -73,6 +73,9 @@ export function buildCharacterSystemPrompt(input: {
     formatClientBrief(input.roomConfig),
     "",
     input.roomConfig.world.worldPromptTemplate,
+    input.roomConfig.world.storyOutline
+      ? `故事主线蓝图：\n${input.roomConfig.world.storyOutline}`
+      : "",
     character.systemPromptTemplate,
     `编剧本轮导演指令：\n${input.playwrightDirection}`,
     "你只能以该角色身份输出一段推进剧情的对话，不要解释系统规则。",
@@ -135,7 +138,9 @@ export function buildPlaywrightControlPrompt(input: {
 }
 
 export function hasBootstrapCompleted(roomConfig: RoomConfig): boolean {
-  const hasWorld = roomConfig.world.playwrightOutput.trim().length > 0;
+  const hasWorld = roomConfig.world.worldPromptTemplate.trim().length > 0
+    && roomConfig.world.playwrightOutput.trim().length > 0
+    && roomConfig.world.storyOutline.trim().length > 0;
   const hasEnabledCharacters = roomConfig.characters.some(character => character.enabled);
   return hasWorld && hasEnabledCharacters;
 }
@@ -145,11 +150,11 @@ export function buildPlaywrightBootstrapPrompt(roomConfig: RoomConfig, conversat
     "你是故事总编剧，需要在正式对话开始前完成初始化。",
     "你的全部输出必须为简体中文。",
     "强制要求：",
-    "1) 先定义完整世界观与故事主线（冲突源、阵营关系、价值议题、叙事风格）。",
-    "2) 必须调用 createCharacter 工具创建 3-6 个角色，且角色名称必须是中文名。",
+    "1) 先调用 setWorldBlueprint 工具，提交完整世界观、主线蓝图和展示稿。",
+    "2) 再调用 createCharacter 工具创建 3-6 个角色，且角色名称必须是中文名。",
     "3) 每个角色必须遵守统一模板字段，不允许漏填。",
-    "4) 若你确认准备完成，请调用 startRoleCycle 工具开启轮回；否则保持未开启状态并说明差距。",
-    "5) 最后输出给用户的《开场设定稿》，内容需包含世界观摘要、角色阵列、首幕张力。",
+    "4) 仅在你确认准备完成后，才调用 startRoleCycle 工具开启轮回。",
+    "5) 初始化阶段可输出解释性文本，但请以工具状态为准推进流程。",
     "",
     "用户创作指令：",
     formatClientBrief(roomConfig),
